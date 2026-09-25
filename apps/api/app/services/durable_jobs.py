@@ -90,6 +90,7 @@ class DurableJobService:
         self,
         *,
         job_type: str | None = None,
+        job_types: list[str] | None = None,
         lease_seconds: int = 600,
     ) -> DurableJob | None:
         if lease_seconds < 1:
@@ -126,8 +127,12 @@ class DurableJobService:
                 .order_by(DurableJob.available_at.asc(), DurableJob.id.asc())
                 .limit(1)
             )
+            if job_type and job_types:
+                raise ValueError("Pass either job_type or job_types, not both")
             if job_type:
                 query = query.where(DurableJob.job_type == job_type)
+            elif job_types:
+                query = query.where(DurableJob.job_type.in_(job_types))
 
             # PostgreSQL workers skip rows claimed by another worker. SQLite
             # ignores FOR UPDATE, but remains useful for deterministic QA.
