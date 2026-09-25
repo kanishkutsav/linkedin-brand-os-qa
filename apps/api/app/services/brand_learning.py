@@ -275,8 +275,16 @@ Return:
                 await self.session.commit()
                 processed += len(profile_events)
             except Exception as exc:
+                # Rollback expires ORM instances. Re-query by stable IDs before
+                # updating retry state so async SQLAlchemy never performs an
+                # implicit lazy load after rollback.
+                failed_event_ids = [int(event.id) for event in profile_events]
                 await self.session.rollback()
-                for event in profile_events:
+                failed_result = await self.session.execute(
+                    select(LearningEvent).where(LearningEvent.id.in_(failed_event_ids))
+                )
+                failed_events = list(failed_result.scalars().all())
+                for event in failed_events:
                     event.attempts = int(event.attempts or 0) + 1
                     event.last_error = str(exc)[:1000]
                     if event.attempts >= 3:
