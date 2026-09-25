@@ -3,7 +3,9 @@ create table if not exists public.mutation_requests (
   user_id integer not null references public.auth_users(id) on delete cascade,
   operation text not null,
   idempotency_key text not null,
-  response_json text not null,
+  response_json text,
+  status text not null default 'RUNNING' check (status in ('RUNNING','SUCCEEDED')),
+  locked_until timestamptz not null default (now() + interval '5 minutes'),
   created_at timestamptz not null default now(),
   unique(user_id, operation, idempotency_key)
 );
