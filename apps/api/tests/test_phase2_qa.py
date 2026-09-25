@@ -1,6 +1,6 @@
 import inspect
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -27,7 +27,7 @@ def test_internal_job_key_is_fail_closed():
     source = Path("app/main.py").read_text()
     assert "if not expected or not x_brand_os_job_key" in source
     assert "secrets.compare_digest" in source
-    assert 'status_code=401' in source
+    assert "status_code=401" in source
 
 
 @pytest.mark.parametrize(
@@ -39,7 +39,8 @@ def test_internal_job_key_is_fail_closed():
     ],
 )
 def test_cron_targets_match_internal_endpoints(job_name, expected_path):
-    sql = Path("../../supabase/migrations/20260925_phase2_scheduler.sql").read_text()
+    repo_root = Path(__file__).resolve().parents[3]
+    sql = (repo_root / "supabase/migrations/20260925_phase2_scheduler.sql").read_text()
     assert expected_path in sql
 
 
