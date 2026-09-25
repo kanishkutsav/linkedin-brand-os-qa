@@ -33,8 +33,21 @@ async function ownedApproval(user:User,id:number){
  const {data,error}=await db.from("approval_requests").select("*, content_versions!inner(id,body,content_hash,version_number,content_items!inner(id,profile_id,title,topic,pillar,status))").eq("id",id).eq("content_versions.content_items.profile_id",user.id).maybeSingle();
  if(error||!data)throw new Error("Approval not found");return data as any;
 }
-async function idem(user:User,op:string,k:string){const {data}=await db.from("mutation_requests").select("response_json").eq("user_id",user.id).eq("operation",op).eq("idempotency_key",k).maybeSingle();return data?.response_json?JSON.parse(data.response_json):null;}
-async function saveIdem(user:User,op:string,k:string,response:unknown){const {error}=await db.from("mutation_requests").insert({user_id:user.id,operation:op,idempotency_key:k,response_json:JSON.stringify(response)});if(error&&!error.message.toLowerCase().includes("duplicate"))throw error;}
+async function claimIdem(user:User,op:string,k:string){
+ const {error}=await db.from("mutation_requests").insert({user_id:user.id,operation:op,idempotency_key:k,status:"RUNNING"});
+ if(!error)return {claimed:true,response:null};
+ if(!error.message.toLowerCase().includes("duplicate"))throw error;
+ const {data}=await db.from("mutation_requests").select("status,response_json,locked_until").eq("user_id",user.id).eq("operation",op).eq("idempotency_key",k).maybeSingle();
+ if(data?.status==="SUCCEEDED"&&data.response_json)return {claimed:false,response:JSON.parse(data.response_json)};
+ if(data?.status==="RUNNING"&&data.locked_until&&new Date(data.locked_until)>new Date())return {claimed:false,response:null,inProgress:true};
+ const {error:takeover}=await db.from("mutation_requests").update({status:"RUNNING",locked_until:new Date(Date.now()+5*60*1000).toISOString()}).eq("user_id",user.id).eq("operation",op).eq("idempotency_key",k).eq("status","RUNNING").lt("locked_until",new Date().toISOString());
+ if(takeover)throw takeover;
+ return {claimed:true,response:null};
+}
+async function saveIdem(user:User,op:string,k:string,response:unknown){
+ const {error}=await db.from("mutation_requests").update({status:"SUCCEEDED",response_json:JSON.stringify(response),locked_until:new Date().toISOString()}).eq("user_id",user.id).eq("operation",op).eq("idempotency_key",k);
+ if(error)throw error;
+}
 async function learningEvent(user:User,eventType:string,sourceType:string,sourceId:string,content:string,metadata:Record<string,unknown>={}){
  const {data,error}=await db.from("learning_events").insert({profile_id:user.id,event_type:eventType,source_type:sourceType,source_id:sourceId,content,metadata_json:JSON.stringify(metadata),status:"PENDING",attempts:0}).select("id").single();if(error)throw error;return data.id;
 }
@@ -102,7 +115,7 @@ Deno.serve(async(req)=>{
   const user=await auth(req),path=new URL(req.url).pathname.replace(/^\/write-api\/?/,"").replace(/^\/?/,""),body=await req.json().catch(()=>({}));
   const op=path.startsWith("approvals/")?path.split("/")[1]:path,id=path.startsWith("approvals/")?Number(path.split("/")[2]):0,k=req.headers.get("X-Idempotency-Key")||"";
   if(["create-draft","learning-thought","approve","edit","reject"].includes(op)&&!k)return out({error:"X-Idempotency-Key is required for retry-safe mutations"},400);
-  if(k){const prior=await idem(user,op,k);if(prior)return out(prior);}
+  if(k){const claim=await claimIdem(user,op,k);if(claim.response)return out(claim.response);if(claim.inProgress)return out({error:"Mutation with this idempotency key is already in progress."},409);}
   let result:any;
   if(op==="create-draft")result=await createDraft(user,body);
   else if(op==="learning-thought"){const content=String(body.content||"").trim();if(content.length<10)throw new Error("Write a little more so Brand OS has a useful idea to learn from.");if(content.length>20000)throw new Error("Thoughts are limited to 20,000 characters.");const eid=await learningEvent(user,"USER_THOUGHT","manual_thought","",content,{topic:String(body.topic||"").slice(0,300),title:String(body.title||"").slice(0,200)});result={saved:true,event_id:eid};}
