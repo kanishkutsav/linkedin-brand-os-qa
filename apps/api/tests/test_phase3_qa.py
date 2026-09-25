@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.jobs.durable_worker import DurableJobWorker
 from app.jobs.ai_workload_worker import build_ai_workload_handlers
+from app.jobs.durable_handlers import build_durable_job_handlers
 from app.models.base import Base
 from app.models.durable_job import DurableJob
 from app.models.models import AuthUser, LearningEvent
@@ -241,6 +242,15 @@ async def test_ai_workload_handlers_validate_payloads():
 def test_phase3c_ai_workloads_are_opt_in():
     assert settings.durable_ai_workloads_enabled is False
     assert settings.durable_ai_worker_enabled is False
+
+
+def test_complete_phase3_handler_registry():
+    handlers = build_durable_job_handlers()
+    assert set(handlers) == {
+        "brand_learning_event",
+        "research_discovery",
+        "approval_regeneration",
+    }
 
 
 def test_phase3_migration_is_non_destructive_to_existing_tables():
