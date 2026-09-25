@@ -23,6 +23,7 @@ from app.auth import require_roles
 from app.core.config import settings
 from app.db.database import engine, get_session, SessionLocal
 from app.services.agent_scheduler import AgentScheduler
+from app.jobs.scheduled_jobs import ScheduledJobs
 from app.services.brand_intelligence import BrandIntelligenceService
 from app.services.brand_learning import BrandLearningService
 from app.guards.guardrails import normalize_human_style, run_content_guards
