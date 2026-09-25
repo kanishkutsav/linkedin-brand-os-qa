@@ -321,6 +321,41 @@ async def test_learning_worker_processing_is_profile_scoped(session_factory):
         assert refreshed_second.status == "PENDING"
 
 
+@pytest.mark.asyncio
+async def test_learning_processing_failure_records_retry_state(session_factory, monkeypatch):
+    async def failing_embed(_self, _texts):
+        raise RuntimeError("embedding provider unavailable")
+
+    monkeypatch.setattr(BrandLearningService, "_embed_documents", failing_embed)
+
+    async with session_factory() as session:
+        event = LearningEvent(
+            profile_id=1,
+            event_type="USER_THOUGHT",
+            source_type="manual_thought",
+            source_id="retry-event",
+            content="Retryable learning event",
+            metadata_json="{}",
+            status="PENDING",
+        )
+        session.add(event)
+        await session.commit()
+        event_id = event.id
+
+        processed = await BrandLearningService(session).process_pending(
+            limit=1,
+            event_ids=[event_id],
+            profile_id=1,
+        )
+        assert processed == 0
+
+        refreshed = await session.get(LearningEvent, event_id)
+        assert refreshed is not None
+        assert refreshed.status == "PENDING"
+        assert refreshed.attempts == 1
+        assert refreshed.last_error == "embedding provider unavailable"
+
+
 def test_learning_worker_handler_passes_profile_scope():
     from pathlib import Path
 
