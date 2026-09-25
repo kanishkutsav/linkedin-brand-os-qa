@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     durable_learning_enqueue_enabled: bool = False
     durable_learning_worker_enabled: bool = False
 
+    # Phase 3C: AI-heavy workload migration remains opt-in during QA.
+    durable_ai_workloads_enabled: bool = False
+    durable_ai_worker_enabled: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
