@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
 type User = { id: number; email: string; role: string; display_name: string | null; linkedin_url: string | null };
 
@@ -93,7 +93,38 @@ async function analyticsRead(user: User) {
   const {data:connection,error:ce}=await db.from("linkedin_connections").select("access_token,token_expires_at").eq("user_id",user.id).maybeSingle(); if(ce)throw ce;
   if(!connection)return {pipeline,linkedin_performance:{available:false,authorization_required:true,message:"Connect LinkedIn first. Analytics requires the official Community Management member analytics permissions."}};
   if(connection.token_expires_at&&new Date(connection.token_expires_at)<=new Date())return {pipeline,linkedin_performance:{available:false,authorization_required:true,message:"Your LinkedIn connection has expired. Reconnect after analytics permissions are enabled."}};
-  return {pipeline,linkedin_performance:{available:false,authorization_required:false,message:"LinkedIn analytics API execution remains staged for the Phase 4 QA cutover; the connection token stays server-side."}};
+  const base = (Deno.env.get("LINKEDIN_API_BASE_URL") || "https://api.linkedin.com").replace(/\/$/, "");
+  const version = Deno.env.get("LINKEDIN_API_VERSION") || "202609";
+  const headers = { Authorization: `Bearer ${connection.access_token}`, "Content-Type": "application/json", "X-Restli-Protocol-Version": "2.0.0", "Linkedin-Version": version };
+  const end = new Date(); end.setUTCDate(end.getUTCDate() + 1);
+  const start = new Date(end); start.setUTCDate(start.getUTCDate() - 30);
+  const dateRange = `(start:(year:${start.getUTCFullYear()},month:${start.getUTCMonth()+1},day:${start.getUTCDate()}),end:(year:${end.getUTCFullYear()},month:${end.getUTCMonth()+1},day:${end.getUTCDate()}))`;
+  const metrics = [["IMPRESSION","DAILY"],["REACTION","DAILY"],["COMMENT","DAILY"],["RESHARE","DAILY"],["MEMBERS_REACHED","TOTAL"]];
+  const results = await Promise.all(metrics.map(async ([metric, aggregation]) => {
+    const url = new URL(base + "/rest/memberCreatorPostAnalytics");
+    url.searchParams.set("q", "me"); url.searchParams.set("queryType", metric); url.searchParams.set("aggregation", aggregation); url.searchParams.set("dateRange", dateRange);
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`LinkedIn analytics HTTP ${response.status}`);
+    return [metric, aggregation, await response.json()];
+  }));
+  const daily: Record<string, Record<string, number>> = {};
+  const totals: Record<string, number> = Object.fromEntries(metrics.map(([m]) => [m, 0]));
+  for (const [metric, aggregation, payload] of results as any[]) {
+    for (const element of payload.elements || []) {
+      const count = Number(element.count || 0); totals[metric] = (totals[metric] || 0) + count;
+      const s = element.dateRange?.start;
+      if (aggregation === "DAILY" && s) {
+        const day = new Date(Date.UTC(Number(s.year), Number(s.month)-1, Number(s.day))).toISOString().slice(0,10);
+        daily[day] ||= {}; daily[day][metric] = count;
+      }
+    }
+  }
+  const trend = Object.keys(daily).sort().map((day) => {
+    const row = daily[day] || {}; const engagement = (row.REACTION || 0) + (row.COMMENT || 0) + (row.RESHARE || 0);
+    return { date: day, IMPRESSION: row.IMPRESSION || 0, REACTION: row.REACTION || 0, COMMENT: row.COMMENT || 0, RESHARE: row.RESHARE || 0, engagement, MEMBERS_REACHED: 0, engagement_rate: row.IMPRESSION ? Number(((engagement / row.IMPRESSION) * 100).toFixed(2)) : 0 };
+  });
+  const engagementTotal = totals.REACTION + totals.COMMENT + totals.RESHARE;
+  return { pipeline, linkedin_performance: { available: true, window_days: 30, from: start.toISOString().slice(0,10), to: new Date(end.getTime()-86400000).toISOString().slice(0,10), totals, engagement_total: engagementTotal, engagement_rate: totals.IMPRESSION ? Number(((engagementTotal / totals.IMPRESSION) * 100).toFixed(2)) : 0, trend, source: "LinkedIn memberCreatorPostAnalytics" } };
 }
 const handlers: Record<string,(u:User)=>Promise<unknown>>={profile:profileRead,"brand/status":brandStatusRead,"brand/memory":brandMemoryRead,"brand/source-posts":sourcePostsRead,"dashboard/approvals":dashboardRead,"agent/status":agentRead,"research/opportunities":researchRead,"learning/status":learningRead,"analytics/overview":analyticsRead};
 Deno.serve(async(req)=>{ if(req.method!=="GET")return json({error:"Method not allowed"},405); const route=new URL(req.url).pathname.replace(/^\/read-api\/?/,"").replace(/^\/?/,""); const h=handlers[route]; if(!h)return json({error:"Not found"},404); try{return json(await h(await authenticate(req)));}catch(e){const m=e instanceof Error?e.message:"Read request failed"; if(m==="Authentication required")return json({error:m},401); console.error("read-api error",e); return json({error:"Read request failed"},500);}});
