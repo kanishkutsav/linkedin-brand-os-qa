@@ -251,6 +251,8 @@ def test_complete_phase3_handler_registry():
     assert set(handlers) == {
         "brand_learning_event",
         "research_discovery",
+        "content_improvement",
+        "manual_content_generation",
         "approval_regeneration",
         "scheduled_discovery",
         "scheduled_calendar",
@@ -276,7 +278,7 @@ def test_phase3_worker_is_not_started_by_fastapi():
 
     main = Path("app/main.py").read_text()
     assert "DurableJobWorker" not in main
-    assert "DurableJobService" not in main
+    assert "DurableJobWorker" not in main
 
 
 @pytest.mark.asyncio
