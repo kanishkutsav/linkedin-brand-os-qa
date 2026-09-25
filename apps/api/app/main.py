@@ -7,7 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -654,28 +654,42 @@ async def _require_scheduled_job_key(x_brand_os_job_key: str | None = Header(def
         raise HTTPException(status_code=401, detail="Invalid scheduled job credentials.")
 
 
-@app.post("/api/internal/scheduled-jobs/{job_name}")
-async def run_scheduled_job(
-    job_name: str,
-    _: None = Depends(_require_scheduled_job_key),
-):
-    if job_name not in {"discovery", "calendar", "retention"}:
-        raise HTTPException(status_code=404, detail="Unknown scheduled job.")
-
+async def _run_scheduled_job_background(job_name: str) -> None:
     jobs = ScheduledJobs(SessionLocal)
     if job_name in {"discovery", "calendar"}:
-        result = await jobs.run(job_name)
-        return {"ok": True, "job": job_name, "result": result}
+        try:
+            result = await jobs.run(job_name)
+            logger.info("Scheduled %s job completed: %s", job_name, result)
+        except Exception:
+            logger.exception("Scheduled %s job failed.", job_name)
+        return
 
     async with SessionLocal() as session:
         try:
             result = await jobs.process_retention(session)
             await session.commit()
-            return {"ok": True, "job": "retention", "result": result}
+            logger.info("Scheduled retention job completed: %s", result)
         except Exception:
             await session.rollback()
             logger.exception("Scheduled retention job failed.")
-            raise HTTPException(status_code=500, detail="Scheduled retention job failed.")
+
+
+@app.post("/api/internal/scheduled-jobs/{job_name}")
+async def run_scheduled_job(
+    job_name: str,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(_require_scheduled_job_key),
+):
+    if job_name not in {"discovery", "calendar", "retention"}:
+        raise HTTPException(status_code=404, detail="Unknown scheduled job.")
+
+    # Supabase pg_net has a short HTTP response timeout. The actual scheduled
+    # work can legitimately take longer because it may call an LLM for each
+    # ready profile. Queue the work in FastAPI's post-response background
+    # execution so Cron receives a fast acknowledgement while the existing
+    # durable AgentRun/idempotency guards protect the work itself.
+    background_tasks.add_task(_run_scheduled_job_background, job_name)
+    return {"ok": True, "job": job_name, "accepted": True}
 
 @app.post("/api/agent/events")
 async def trigger_agent_event(
