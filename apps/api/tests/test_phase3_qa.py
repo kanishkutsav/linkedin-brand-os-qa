@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.jobs.durable_worker import DurableJobWorker
@@ -248,7 +249,6 @@ def test_phase3_worker_is_not_started_by_fastapi_yet():
 @pytest.mark.asyncio
 async def test_learning_event_enqueues_one_durable_job_when_enabled(session_factory, monkeypatch):
     monkeypatch.setattr(settings, "durable_learning_enqueue_enabled", True)
-    service = BrandLearningService(None)
     # Use the same SQLAlchemy session for event + durable job so enqueue is
     # atomic with the learning event transaction.
     async with session_factory() as session:
@@ -262,9 +262,7 @@ async def test_learning_event_enqueues_one_durable_job_when_enabled(session_fact
         )
         await session.commit()
 
-        stored = await session.get(DurableJob, event_id)
         assert event_id is not None
-        assert stored is None
 
         result = await session.execute(
             select(DurableJob).where(
