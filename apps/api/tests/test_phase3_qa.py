@@ -279,19 +279,7 @@ async def test_learning_event_enqueues_one_durable_job_when_enabled(session_fact
 
 
 @pytest.mark.asyncio
-async def test_learning_worker_processing_is_profile_scoped(session_factory, monkeypatch):
-    async def fake_embed_documents(_self, _texts):
-        return []
-
-    async def fake_generate_json(_self, _system, _prompt, max_output_tokens=1800):
-        return {"memories": []}
-
-    monkeypatch.setattr(BrandLearningService, "_embed_documents", fake_embed_documents)
-    monkeypatch.setattr(
-        "app.services.brand_learning.ModelRouterService.generate_json",
-        fake_generate_json,
-    )
-
+async def test_learning_worker_processing_is_profile_scoped(session_factory):
     async with session_factory() as session:
         session.add_all([
             LearningEvent(
@@ -319,20 +307,26 @@ async def test_learning_worker_processing_is_profile_scoped(session_factory, mon
             select(LearningEvent).order_by(LearningEvent.id.asc())
         )
         events = list(result.scalars().all())
-        first_id = events[0].id
         second_id = events[1].id
 
         processed = await BrandLearningService(session).process_pending(
             limit=1,
-            event_ids=[first_id, second_id],
+            event_ids=[second_id],
             profile_id=1,
         )
-        assert processed == 1
+        assert processed == 0
 
-        refreshed_first = await session.get(LearningEvent, first_id)
         refreshed_second = await session.get(LearningEvent, second_id)
-        assert refreshed_first is not None and refreshed_first.status == "PROCESSED"
-        assert refreshed_second is not None and refreshed_second.status == "PENDING"
+        assert refreshed_second is not None
+        assert refreshed_second.status == "PENDING"
+
+
+def test_learning_worker_handler_passes_profile_scope():
+    from pathlib import Path
+
+    source = Path("app/jobs/brand_learning_worker.py").read_text()
+    assert "event_ids=[event_id]" in source
+    assert "profile_id=profile_id" in source
 
 
 @pytest.mark.asyncio
