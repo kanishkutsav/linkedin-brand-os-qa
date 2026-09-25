@@ -697,13 +697,21 @@ async def run_scheduled_job(
     if job_name not in {"discovery", "calendar", "retention"}:
         raise HTTPException(status_code=404, detail="Unknown scheduled job.")
 
-    # Supabase pg_net has a short HTTP response timeout. The actual scheduled
-    # work can legitimately take longer because it may call an LLM for each
-    # ready profile. Queue the work in FastAPI's post-response background
-    # execution so Cron receives a fast acknowledgement while the existing
-    # durable AgentRun/idempotency guards protect the work itself.
+    if settings.durable_scheduled_jobs_enabled:
+        ist_day = datetime.now(ZoneInfo(settings.agent_timezone)).strftime("%Y-%m-%d")
+        job, created = await _enqueue_durable_job(
+            job_type=f"scheduled_{job_name}",
+            idempotency_key=f"scheduled:{job_name}:{ist_day}",
+            user_id=None,
+            payload={"mode": job_name},
+        )
+        return {"ok": True, "job": job_name, "accepted": True, "queued": True, "job_id": job.id, "created": created}
+
+    # Compatibility path used while Phase 3 is being validated. Supabase
+    # receives a fast acknowledgement and the existing Phase 2 execution path
+    # remains untouched until the durable worker is explicitly enabled.
     _dispatch_scheduled_job(job_name)
-    return {"ok": True, "job": job_name, "accepted": True}
+    return {"ok": True, "job": job_name, "accepted": True, "queued": False}
 
 async def _enqueue_durable_job(
     *,
@@ -760,6 +768,28 @@ async def trigger_agent_event(
         run.finished_at = datetime.now(timezone.utc)
         await session.commit()
         raise HTTPException(status_code=500, detail="Agent event processing failed") from exc
+
+
+@app.get("/api/durable-jobs/{job_id}")
+async def durable_job_status(
+    job_id: int,
+    current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
+):
+    job = await _get_durable_job_for_user(job_id, int(current_user.id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Durable job not found.")
+    result = json.loads(job.result_json or "{}") if job.result_json else None
+    return {
+        "id": job.id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "attempts": job.attempts,
+        "max_attempts": job.max_attempts,
+        "available_at": job.available_at,
+        "finished_at": job.finished_at,
+        "last_error": job.last_error,
+        "result": result,
+    }
 
 
 @app.post("/api/strategy/recommend")
