@@ -14,6 +14,7 @@ async def process_brand_learning_event(payload: dict[str, Any]) -> dict[str, Any
         processed = await BrandLearningService(session).process_pending(
             limit=1,
             event_ids=[event_id],
+            profile_id=profile_id,
         )
 
     return {
