@@ -223,7 +223,7 @@ async def test_worker_rejects_unknown_job_type_without_crashing(session_factory)
     async with session_factory() as session:
         stored = await session.get(DurableJob, job.id)
         assert stored is not None
-        assert stored.status == "QUEUED"
+        assert stored.status == "FAILED"
         assert "No handler registered" in (stored.last_error or "")
 
 
@@ -420,3 +420,23 @@ async def test_learning_event_does_not_enqueue_job_by_default(session_factory, m
         assert result.scalar_one_or_none() is None
 
 # Phase 3 QA: regression suite remains intentionally production-disconnected.
+
+
+@pytest.mark.asyncio
+async def test_exhausted_running_lease_becomes_terminal_failure(session_factory):
+    service = DurableJobService(session_factory)
+    job, _ = await service.enqueue(job_type="lease-terminal", idempotency_key="lease-terminal", max_attempts=1)
+    claimed = await service.claim_next()
+    assert claimed is not None
+    async with session_factory() as session:
+        stored = await session.get(DurableJob, job.id)
+        stored.locked_at = utcnow() - timedelta(seconds=601)
+        await session.commit()
+
+    assert await service.claim_next(lease_seconds=600) is None
+
+    async with session_factory() as session:
+        stored = await session.get(DurableJob, job.id)
+        assert stored is not None
+        assert stored.status == "FAILED"
+        assert stored.finished_at is not None
