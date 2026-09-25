@@ -12,6 +12,10 @@ jobs:
     defaults:
       run:
         working-directory: apps/api
+    env:
+      PYTHONPATH: ${{ github.workspace }}/apps/api
+      DATABASE_URL: sqlite+aiosqlite:///./qa.db
+      SCHEDULED_JOB_KEY: qa-test-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
