@@ -1,1 +1,1 @@
-from .durable_job import DurableJob
+# Package marker. DurableJob is imported explicitly by durable-worker code.
