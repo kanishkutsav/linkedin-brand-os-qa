@@ -770,6 +770,18 @@ async def trigger_agent_event(
         raise HTTPException(status_code=500, detail="Agent event processing failed") from exc
 
 
+async def _get_durable_job_for_user(job_id: int, user_id: int):
+    from app.models.durable_job import DurableJob
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(DurableJob).where(
+                DurableJob.id == job_id,
+                DurableJob.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+
 @app.get("/api/durable-jobs/{job_id}")
 async def durable_job_status(
     job_id: int,
