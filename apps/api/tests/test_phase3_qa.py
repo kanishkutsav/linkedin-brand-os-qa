@@ -230,7 +230,7 @@ async def test_worker_rejects_unknown_job_type_without_crashing(session_factory)
 @pytest.mark.asyncio
 async def test_ai_workload_handlers_validate_payloads():
     handlers = build_ai_workload_handlers()
-    assert set(handlers) == {"research_discovery", "approval_regeneration"}
+    assert set(handlers) == {"research_discovery", "content_improvement", "manual_content_generation", "approval_regeneration"}
 
     with pytest.raises(ValueError, match="profile_id"):
         await handlers["research_discovery"]({})
@@ -242,6 +242,8 @@ async def test_ai_workload_handlers_validate_payloads():
 def test_phase3c_ai_workloads_are_opt_in():
     assert settings.durable_ai_workloads_enabled is False
     assert settings.durable_ai_worker_enabled is False
+    assert settings.durable_scheduled_jobs_enabled is False
+    assert settings.durable_scheduled_worker_enabled is False
 
 
 def test_complete_phase3_handler_registry():
@@ -250,6 +252,9 @@ def test_complete_phase3_handler_registry():
         "brand_learning_event",
         "research_discovery",
         "approval_regeneration",
+        "scheduled_discovery",
+        "scheduled_calendar",
+        "scheduled_retention",
     }
 
 
@@ -266,7 +271,7 @@ def test_phase3_migration_is_non_destructive_to_existing_tables():
     assert "drop table" not in text.lower()
 
 
-def test_phase3_worker_is_not_started_by_fastapi_yet():
+def test_phase3_worker_is_not_started_by_fastapi():
     from pathlib import Path
 
     main = Path("app/main.py").read_text()
