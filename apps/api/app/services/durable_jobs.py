@@ -111,9 +111,14 @@ class DurableJobService:
                 )
             )
             for job in stale.scalars().all():
-                job.status = "QUEUED"
                 job.locked_at = None
-                job.available_at = now
+                if job.attempts >= job.max_attempts:
+                    job.status = "FAILED"
+                    job.finished_at = now
+                    job.last_error = job.last_error or "Worker lease expired after the retry budget was exhausted."
+                else:
+                    job.status = "QUEUED"
+                    job.available_at = now
 
             await session.flush()
 
@@ -183,6 +188,7 @@ class DurableJobService:
         *,
         error: str,
         retry_delay_seconds: int = 60,
+        retryable: bool = True,
     ) -> DurableJob:
         if retry_delay_seconds < 0:
             raise ValueError("retry_delay_seconds cannot be negative")
@@ -199,7 +205,7 @@ class DurableJobService:
             job.locked_at = None
             job.updated_at = now
 
-            if job.attempts < job.max_attempts:
+            if retryable and job.attempts < job.max_attempts:
                 job.status = "QUEUED"
                 job.available_at = now + timedelta(seconds=retry_delay_seconds)
             else:
