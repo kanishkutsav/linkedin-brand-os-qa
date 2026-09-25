@@ -418,3 +418,5 @@ async def test_learning_event_does_not_enqueue_job_by_default(session_factory, m
             )
         )
         assert result.scalar_one_or_none() is None
+
+# Phase 3 QA: regression suite remains intentionally production-disconnected.
