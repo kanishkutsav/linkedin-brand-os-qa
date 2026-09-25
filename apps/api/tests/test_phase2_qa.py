@@ -134,3 +134,18 @@ def test_unknown_scheduled_job_is_rejected():
     jobs = ScheduledJobs(Mock())
     with pytest.raises(ValueError):
         asyncio.run(jobs.run("unknown"))
+
+
+@pytest.mark.parametrize("job_name", ["discovery", "calendar"])
+def test_valid_daily_job_delegates_to_scheduled_jobs(job_name):
+    client = TestClient(app)
+    mocked = Mock()
+    mocked.run = AsyncMock(return_value={"mode": job_name, "profiles": 0, "skipped": 0, "succeeded": 0, "failed": 0})
+    with patch("app.main.ScheduledJobs", return_value=mocked):
+        response = client.post(
+            f"/api/internal/scheduled-jobs/{job_name}",
+            headers={"X-Brand-OS-Job-Key": "qa-test-key"},
+        )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mocked.run.assert_awaited_once_with(job_name)
