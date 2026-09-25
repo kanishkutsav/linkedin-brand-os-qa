@@ -37,7 +37,6 @@ from app.services.auth_service import AppUser, AuthService
 from app.services.linkedin_oauth import build_authorization_url, exchange_code, handle_callback
 from app.services.linkedin_analytics import LinkedInAnalyticsService
 from app.services.gemini_service import ModelRouterService
-from app.services.durable_jobs import DurableJobService
 from app.services.content_ai import ContentAIService
 
 logger = logging.getLogger(__name__)
@@ -720,6 +719,7 @@ async def _enqueue_durable_job(
     user_id: int | None,
     payload: dict[str, object],
 ):
+    from app.services.durable_jobs import DurableJobService
     return await DurableJobService(SessionLocal).enqueue(
         job_type=job_type,
         idempotency_key=idempotency_key,
