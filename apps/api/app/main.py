@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -7,7 +8,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
+from fastapi import Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -674,10 +675,20 @@ async def _run_scheduled_job_background(job_name: str) -> None:
             logger.exception("Scheduled retention job failed.")
 
 
+
+
+_scheduled_background_tasks: set[asyncio.Task] = set()
+
+
+def _dispatch_scheduled_job(job_name: str) -> None:
+    task = asyncio.create_task(_run_scheduled_job_background(job_name))
+    _scheduled_background_tasks.add(task)
+    task.add_done_callback(_scheduled_background_tasks.discard)
+
+
 @app.post("/api/internal/scheduled-jobs/{job_name}")
 async def run_scheduled_job(
     job_name: str,
-    background_tasks: BackgroundTasks,
     _: None = Depends(_require_scheduled_job_key),
 ):
     if job_name not in {"discovery", "calendar", "retention"}:
@@ -688,7 +699,7 @@ async def run_scheduled_job(
     # ready profile. Queue the work in FastAPI's post-response background
     # execution so Cron receives a fast acknowledgement while the existing
     # durable AgentRun/idempotency guards protect the work itself.
-    background_tasks.add_task(_run_scheduled_job_background, job_name)
+    _dispatch_scheduled_job(job_name)
     return {"ok": True, "job": job_name, "accepted": True}
 
 @app.post("/api/agent/events")

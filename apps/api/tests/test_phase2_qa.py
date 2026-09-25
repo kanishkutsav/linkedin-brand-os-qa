@@ -55,8 +55,9 @@ def test_internal_job_key_is_fail_closed():
 
 def test_internal_scheduler_endpoint_dispatches_long_running_jobs_in_background():
     source = Path("app/main.py").read_text()
-    assert "background_tasks: BackgroundTasks" in source
-    assert "background_tasks.add_task(_run_scheduled_job_background, job_name)" in source
+    assert "_scheduled_background_tasks: set[asyncio.Task] = set()" in source
+    assert "asyncio.create_task(_run_scheduled_job_background(job_name))" in source
+    assert "_scheduled_background_tasks.add(task)" in source
     assert '"accepted": True' in source
 
 
