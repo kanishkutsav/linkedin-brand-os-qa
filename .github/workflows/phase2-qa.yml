@@ -4,7 +4,7 @@ on:
   push:
     branches: ["phase2-qa"]
   pull_request:
-    branches: ["phase2-qa"]
+    branches: ["main"]
 
 jobs:
   backend:
