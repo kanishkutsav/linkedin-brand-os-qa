@@ -9,6 +9,8 @@ from app.models.base import Base
 from app.models.durable_job import DurableJob
 from app.models.models import AuthUser
 from app.services.durable_jobs import DurableJobService, utcnow
+from app.services.brand_learning import BrandLearningService
+from app.core.config import settings
 
 
 @pytest.fixture
@@ -241,3 +243,59 @@ def test_phase3_worker_is_not_started_by_fastapi_yet():
     main = Path("app/main.py").read_text()
     assert "DurableJobWorker" not in main
     assert "DurableJobService" not in main
+
+
+@pytest.mark.asyncio
+async def test_learning_event_enqueues_one_durable_job_when_enabled(session_factory, monkeypatch):
+    monkeypatch.setattr(settings, "durable_learning_enqueue_enabled", True)
+    service = BrandLearningService(None)
+    # Use the same SQLAlchemy session for event + durable job so enqueue is
+    # atomic with the learning event transaction.
+    async with session_factory() as session:
+        service = BrandLearningService(session)
+        event_id = await service.record_event(
+            profile_id=1,
+            event_type="USER_THOUGHT",
+            source_type="manual_thought",
+            source_id="thought-1",
+            content="A durable learning test event.",
+        )
+        await session.commit()
+
+        stored = await session.get(DurableJob, event_id)
+        assert event_id is not None
+        assert stored is None
+
+        result = await session.execute(
+            select(DurableJob).where(
+                DurableJob.idempotency_key == f"learning-event:{event_id}"
+            )
+        )
+        job = result.scalar_one()
+        assert job.job_type == "brand_learning_event"
+        assert job.status == "QUEUED"
+        assert json.loads(job.payload_json or "{}") == {
+            "learning_event_id": event_id,
+            "profile_id": 1,
+        }
+
+
+@pytest.mark.asyncio
+async def test_learning_event_does_not_enqueue_job_by_default(session_factory, monkeypatch):
+    monkeypatch.setattr(settings, "durable_learning_enqueue_enabled", False)
+    async with session_factory() as session:
+        event_id = await BrandLearningService(session).record_event(
+            profile_id=1,
+            event_type="USER_THOUGHT",
+            source_type="manual_thought",
+            source_id="thought-default",
+            content="Existing learning path remains unchanged.",
+        )
+        await session.commit()
+
+        result = await session.execute(
+            select(DurableJob).where(
+                DurableJob.idempotency_key == f"learning-event:{event_id}"
+            )
+        )
+        assert result.scalar_one_or_none() is None
