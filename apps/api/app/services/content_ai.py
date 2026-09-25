@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.guards.guardrails import normalize_human_style, run_content_guards
-from app.models.models import VoiceMemory
+from app.models.models import UserProfile, VoiceMemory
 from app.services.brand_intelligence import BrandIntelligenceService
 from app.services.gemini_service import ModelRouterService
 
@@ -37,7 +37,7 @@ class ContentAIService:
         if memory is None or memory.status != "READY":
             raise ValueError("Complete Brand Intelligence setup first.")
 
-        profile = await session.get(__import__("app.models.models", fromlist=["UserProfile"]).UserProfile, profile_id)
+        profile = await session.get(UserProfile, profile_id)
         if profile is None:
             raise ValueError("Complete Brand DNA setup first.")
         if (
