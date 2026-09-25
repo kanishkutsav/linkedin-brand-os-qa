@@ -1,0 +1,13 @@
+# Python 3.14.7-compatible dependency set
+fastapi==0.140.3
+uvicorn[standard]==0.53.0
+pydantic==2.13.0
+pydantic-settings==2.15.0
+sqlalchemy==2.0.54
+aiosqlite==0.22.1
+asyncpg==0.30.0
+python-multipart==0.0.20
+httpx==0.28.1
+google-genai
+
+pgvector==0.5.0
