@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.durable_job import DurableJob
@@ -66,7 +67,22 @@ class DurableJobService:
                 available_at=available_at or utcnow(),
             )
             session.add(job)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                # Another worker may have won the same idempotency key between
+                # the read above and this insert. Treat the unique constraint
+                # as the durable winner instead of surfacing a duplicate error.
+                await session.rollback()
+                existing = await session.execute(
+                    select(DurableJob).where(
+                        DurableJob.idempotency_key == idempotency_key
+                    )
+                )
+                job = existing.scalar_one_or_none()
+                if job is None:
+                    raise
+                return job, False
             await session.refresh(job)
             return job, True
 
