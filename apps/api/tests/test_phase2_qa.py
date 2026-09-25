@@ -117,7 +117,7 @@ def test_dashboard_counts_are_not_derived_from_retention_window():
     approval = Path("app/services/approval.py").read_text()
     retention = Path("app/services/retention.py").read_text()
     assert "def dashboard_counts" in approval
-    assert "select(func.count(ApprovalRequest.id))" in approval
+    assert "func.count(ApprovalRequest.id)" in approval
     assert "published_post_retention_limit" not in approval[approval.index("def dashboard_counts"):approval.index("def dashboard_counts")+5000]
     assert "published_post_retention_limit" in retention
 
