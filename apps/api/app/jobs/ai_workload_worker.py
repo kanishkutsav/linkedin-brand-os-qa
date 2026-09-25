@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.db.database import SessionLocal
+from app.agents.orchestrator import AgentOrchestrator
 from app.agents.research import ResearchService
 from app.services.approval import ApprovalService
+from app.services.content_ai import ContentAIService
 
 
 def _require_int(payload: dict[str, Any], key: str) -> int:
@@ -37,6 +39,25 @@ async def run_research_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def run_content_improvement(payload: dict[str, Any]) -> dict[str, Any]:
+    profile_id = _require_int(payload, "profile_id")
+    async with SessionLocal() as session:
+        return await ContentAIService().improve(
+            session,
+            profile_id=profile_id,
+            title=str(payload.get("title") or ""),
+            topic=str(payload.get("topic") or ""),
+            body=str(payload.get("body") or ""),
+            language=str(payload.get("language")) if payload.get("language") else None,
+        )
+
+
+async def run_manual_content_generation(payload: dict[str, Any]) -> dict[str, Any]:
+    profile_id = _require_int(payload, "profile_id")
+    async with SessionLocal() as session:
+        return await AgentOrchestrator(session, profile_id).run_manual_content_generation()
+
+
 async def run_approval_regeneration(payload: dict[str, Any]) -> dict[str, Any]:
     profile_id = _require_int(payload, "profile_id")
     approval_id = _require_int(payload, "approval_id")
@@ -60,5 +81,7 @@ async def run_approval_regeneration(payload: dict[str, Any]) -> dict[str, Any]:
 def build_ai_workload_handlers() -> dict[str, Any]:
     return {
         "research_discovery": run_research_discovery,
+        "content_improvement": run_content_improvement,
+        "manual_content_generation": run_manual_content_generation,
         "approval_regeneration": run_approval_regeneration,
     }
