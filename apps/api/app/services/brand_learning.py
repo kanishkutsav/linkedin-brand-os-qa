@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.models import LearningEvent, LearningMemory
+from app.models.durable_job import DurableJob
 from app.services.gemini_service import ModelRouterService
 from app.models.models import UserProfile
 
@@ -75,6 +76,30 @@ class BrandLearningService:
         )
         self.session.add(event)
         await self.session.flush()
+
+        if settings.durable_learning_enqueue_enabled:
+            existing_job = await self.session.execute(
+                select(DurableJob.id).where(
+                    DurableJob.idempotency_key == f"learning-event:{event.id}"
+                ).limit(1)
+            )
+            if existing_job.scalar_one_or_none() is None:
+                self.session.add(
+                    DurableJob(
+                        user_id=profile_id,
+                        job_type="brand_learning_event",
+                        status="QUEUED",
+                        idempotency_key=f"learning-event:{event.id}",
+                        payload_json=json.dumps(
+                            {"learning_event_id": event.id, "profile_id": profile_id},
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ),
+                        max_attempts=3,
+                    )
+                )
+                await self.session.flush()
+
         return event.id
 
     async def _embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -106,14 +131,16 @@ class BrandLearningService:
         embeddings = result.embeddings or []
         return list(getattr(embeddings[0], "values", None) or []) if embeddings else []
 
-    async def process_pending(self, limit: int = 10) -> int:
-        result = await self.session.execute(
+    async def process_pending(self, limit: int = 10, event_ids: list[int] | None = None) -> int:
+        query = (
             select(LearningEvent)
             .where(LearningEvent.status == "PENDING")
             .order_by(LearningEvent.created_at.asc())
             .limit(max(1, min(limit, 50)))
-            .with_for_update(skip_locked=True)
         )
+        if event_ids:
+            query = query.where(LearningEvent.id.in_(event_ids))
+        result = await self.session.execute(query.with_for_update(skip_locked=True))
         events = list(result.scalars().all())
         if not events:
             return 0
