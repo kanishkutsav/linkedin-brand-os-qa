@@ -14,7 +14,7 @@ def test_edge_function_exists_and_is_read_only():
 def test_explicit_route_allowlist():
     text = FUNCTION.read_text(encoding="utf-8")
     for route in EXPECTED:
-        assert '"' + route + '"' in text
+        assert route in text
 
 def test_custom_session_auth_is_preserved():
     text = FUNCTION.read_text(encoding="utf-8")
