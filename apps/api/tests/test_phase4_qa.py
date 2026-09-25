@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FUNCTION = ROOT / "supabase" / "functions" / "read-api" / "index.ts"
 EXPECTED = {"profile","brand/status","brand/memory","brand/source-posts","dashboard/approvals","agent/status","research/opportunities","learning/status","analytics/overview"}
 
