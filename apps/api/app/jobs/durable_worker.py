@@ -16,11 +16,10 @@ JobHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]]
 
 
 class DurableJobWorker:
-    """Minimal polling worker for Phase 3.
+    """Polling worker for Phase 3 durable workloads.
 
-    This worker is intentionally not started by FastAPI in Phase 3A. It is a
-    standalone execution boundary that can be attached to a Render worker
-    process after its lifecycle and failure semantics pass QA.
+    The worker is a separate execution process. FastAPI never starts it, so
+    web-request lifecycle and long-running AI work remain isolated.
     """
 
     def __init__(
@@ -28,6 +27,7 @@ class DurableJobWorker:
         session_factory: async_sessionmaker[AsyncSession],
         handlers: dict[str, JobHandler],
         *,
+        allowed_job_types: set[str] | None = None,
         poll_interval_seconds: int = 5,
         lease_seconds: int = 600,
     ):
@@ -37,11 +37,15 @@ class DurableJobWorker:
             raise ValueError("lease_seconds must be at least 1")
         self.jobs = DurableJobService(session_factory)
         self.handlers = handlers
+        self.allowed_job_types = allowed_job_types
         self.poll_interval_seconds = poll_interval_seconds
         self.lease_seconds = lease_seconds
 
     async def run_once(self) -> bool:
-        job = await self.jobs.claim_next(lease_seconds=self.lease_seconds)
+        job = await self.jobs.claim_next(
+            job_types=sorted(self.allowed_job_types) if self.allowed_job_types else None,
+            lease_seconds=self.lease_seconds,
+        )
         if job is None:
             return False
 
