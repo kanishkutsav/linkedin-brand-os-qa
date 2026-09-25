@@ -131,7 +131,12 @@ class BrandLearningService:
         embeddings = result.embeddings or []
         return list(getattr(embeddings[0], "values", None) or []) if embeddings else []
 
-    async def process_pending(self, limit: int = 10, event_ids: list[int] | None = None) -> int:
+    async def process_pending(
+        self,
+        limit: int = 10,
+        event_ids: list[int] | None = None,
+        profile_id: int | None = None,
+    ) -> int:
         query = (
             select(LearningEvent)
             .where(LearningEvent.status == "PENDING")
@@ -140,6 +145,8 @@ class BrandLearningService:
         )
         if event_ids:
             query = query.where(LearningEvent.id.in_(event_ids))
+        if profile_id is not None:
+            query = query.where(LearningEvent.profile_id == profile_id)
         result = await self.session.execute(query.with_for_update(skip_locked=True))
         events = list(result.scalars().all())
         if not events:
