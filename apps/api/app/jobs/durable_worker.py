@@ -55,6 +55,7 @@ class DurableJobWorker:
                 job.id,
                 error=f"No handler registered for job type: {job.job_type}",
                 retry_delay_seconds=0,
+                retryable=False,
             )
             return True
 
