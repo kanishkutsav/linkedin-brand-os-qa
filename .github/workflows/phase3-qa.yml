@@ -63,3 +63,4 @@ jobs:
           grep -q "status in ('QUEUED','RUNNING','SUCCEEDED','FAILED')" supabase/migrations/20260926_phase3_durable_jobs.sql
           grep -q "drop table if exists public.durable_jobs" supabase/migrations/20260926_phase3_durable_jobs_rollback.sql
           ! grep -q "cron.schedule" supabase/migrations/20260926_phase3_durable_jobs.sql
+# Phase 3 QA intentionally does not deploy or mutate production infrastructure.
