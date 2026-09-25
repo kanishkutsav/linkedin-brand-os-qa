@@ -280,7 +280,7 @@ async def test_learning_event_enqueues_one_durable_job_when_enabled(session_fact
 
 @pytest.mark.asyncio
 async def test_learning_worker_processing_is_profile_scoped(session_factory, monkeypatch):
-    async def fake_embed_documents(_texts):
+    async def fake_embed_documents(_self, _texts):
         return []
 
     async def fake_generate_json(_self, _system, _prompt, max_output_tokens=1800):
