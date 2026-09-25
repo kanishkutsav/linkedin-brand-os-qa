@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.jobs.durable_worker import DurableJobWorker
 from app.models.base import Base
 from app.models.durable_job import DurableJob
-from app.models.models import AuthUser
+from app.models.models import AuthUser, LearningEvent
 from app.services.durable_jobs import DurableJobService, utcnow
 from app.services.brand_learning import BrandLearningService
 from app.core.config import settings
@@ -276,6 +276,63 @@ async def test_learning_event_enqueues_one_durable_job_when_enabled(session_fact
             "learning_event_id": event_id,
             "profile_id": 1,
         }
+
+
+@pytest.mark.asyncio
+async def test_learning_worker_processing_is_profile_scoped(session_factory, monkeypatch):
+    async def fake_embed_documents(_texts):
+        return []
+
+    async def fake_generate_json(_self, _system, _prompt, max_output_tokens=1800):
+        return {"memories": []}
+
+    monkeypatch.setattr(BrandLearningService, "_embed_documents", fake_embed_documents)
+    monkeypatch.setattr(
+        "app.services.brand_learning.ModelRouterService.generate_json",
+        fake_generate_json,
+    )
+
+    async with session_factory() as session:
+        session.add_all([
+            LearningEvent(
+                profile_id=1,
+                event_type="USER_THOUGHT",
+                source_type="manual_thought",
+                source_id="profile-1-event",
+                content="Profile one event",
+                metadata_json="{}",
+                status="PENDING",
+            ),
+            LearningEvent(
+                profile_id=2,
+                event_type="USER_THOUGHT",
+                source_type="manual_thought",
+                source_id="profile-2-event",
+                content="Profile two event",
+                metadata_json="{}",
+                status="PENDING",
+            ),
+        ])
+        await session.commit()
+
+        result = await session.execute(
+            select(LearningEvent).order_by(LearningEvent.id.asc())
+        )
+        events = list(result.scalars().all())
+        first_id = events[0].id
+        second_id = events[1].id
+
+        processed = await BrandLearningService(session).process_pending(
+            limit=1,
+            event_ids=[first_id, second_id],
+            profile_id=1,
+        )
+        assert processed == 1
+
+        refreshed_first = await session.get(LearningEvent, first_id)
+        refreshed_second = await session.get(LearningEvent, second_id)
+        assert refreshed_first is not None and refreshed_first.status == "PROCESSED"
+        assert refreshed_second is not None and refreshed_second.status == "PENDING"
 
 
 @pytest.mark.asyncio
