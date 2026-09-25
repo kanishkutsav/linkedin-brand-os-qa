@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -46,3 +46,14 @@ jobs:
           grep -q "brand_os_job_key" supabase/migrations/20260925_phase2_scheduler.sql
           grep -q "X-Brand-OS-Job-Key" supabase/migrations/20260925_phase2_scheduler.sql
           test -s supabase/migrations/20260925_phase2_scheduler_rollback.sql
+
+  runtime-3-14:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Compile application under production Python
+        working-directory: apps/api
+        run: python -m compileall -q app tests
