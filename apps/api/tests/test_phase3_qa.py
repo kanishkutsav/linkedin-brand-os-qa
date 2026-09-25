@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.jobs.durable_worker import DurableJobWorker
+from app.jobs.ai_workload_worker import build_ai_workload_handlers
 from app.models.base import Base
 from app.models.durable_job import DurableJob
 from app.models.models import AuthUser, LearningEvent
@@ -223,6 +224,23 @@ async def test_worker_rejects_unknown_job_type_without_crashing(session_factory)
         assert stored is not None
         assert stored.status == "QUEUED"
         assert "No handler registered" in (stored.last_error or "")
+
+
+@pytest.mark.asyncio
+async def test_ai_workload_handlers_validate_payloads():
+    handlers = build_ai_workload_handlers()
+    assert set(handlers) == {"research_discovery", "approval_regeneration"}
+
+    with pytest.raises(ValueError, match="profile_id"):
+        await handlers["research_discovery"]({})
+
+    with pytest.raises(ValueError, match="approval_id"):
+        await handlers["approval_regeneration"]({"profile_id": 1})
+
+
+def test_phase3c_ai_workloads_are_opt_in():
+    assert settings.durable_ai_workloads_enabled is False
+    assert settings.durable_ai_worker_enabled is False
 
 
 def test_phase3_migration_is_non_destructive_to_existing_tables():
