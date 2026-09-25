@@ -442,3 +442,5 @@ async def test_exhausted_running_lease_becomes_terminal_failure(session_factory)
         assert stored.finished_at is not None
 
 # Phase 3 QA: lease recovery regression included.
+
+# Phase 3 QA: stale exhausted leases are terminal.
