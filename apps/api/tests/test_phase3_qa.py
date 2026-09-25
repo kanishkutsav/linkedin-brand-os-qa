@@ -1,5 +1,5 @@
-import asyncio
 import json
+from datetime import timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.jobs.durable_worker import DurableJobWorker
 from app.models.base import Base
 from app.models.durable_job import DurableJob
-from app.services.durable_jobs import DurableJobService
+from app.models.models import AuthUser
+from app.services.durable_jobs import DurableJobService, utcnow
 
 
 @pytest.fixture
@@ -106,6 +107,32 @@ async def test_failure_requeues_then_eventually_becomes_terminal(session_factory
 
 
 @pytest.mark.asyncio
+async def test_expired_running_lease_is_reclaimed(session_factory):
+    service = DurableJobService(session_factory)
+    job, _ = await service.enqueue(
+        job_type="test",
+        idempotency_key="expired-lease",
+        max_attempts=3,
+    )
+
+    claimed = await service.claim_next()
+    assert claimed is not None
+
+    async with session_factory() as session:
+        stored = await session.get(DurableJob, job.id)
+        assert stored is not None
+        stored.status = "RUNNING"
+        stored.locked_at = utcnow() - timedelta(seconds=601)
+        await session.commit()
+
+    reclaimed = await service.claim_next(lease_seconds=600)
+    assert reclaimed is not None
+    assert reclaimed.id == job.id
+    assert reclaimed.status == "RUNNING"
+    assert reclaimed.attempts == 2
+
+
+@pytest.mark.asyncio
 async def test_worker_dispatches_handler_and_records_result(session_factory):
     seen = []
 
@@ -164,9 +191,7 @@ async def test_worker_retries_handler_failure_with_bounded_backoff(session_facto
         assert stored.status == "QUEUED"
         assert stored.attempts == 1
         assert "RuntimeError: provider unavailable" in (stored.last_error or "")
-        stored.available_at = stored.available_at.replace(
-            year=stored.available_at.year - 1
-        )
+        stored.available_at = utcnow() - timedelta(seconds=1)
         await session.commit()
 
     assert await worker.run_once() is True
@@ -176,6 +201,25 @@ async def test_worker_retries_handler_failure_with_bounded_backoff(session_facto
         assert stored is not None
         assert stored.status == "FAILED"
         assert stored.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_unknown_job_type_without_crashing(session_factory):
+    service = DurableJobService(session_factory)
+    job, _ = await service.enqueue(
+        job_type="unknown-type",
+        idempotency_key="unknown-handler",
+    )
+
+    worker = DurableJobWorker(session_factory, {}, poll_interval_seconds=1)
+
+    assert await worker.run_once() is True
+
+    async with session_factory() as session:
+        stored = await session.get(DurableJob, job.id)
+        assert stored is not None
+        assert stored.status == "QUEUED"
+        assert "No handler registered" in (stored.last_error or "")
 
 
 def test_phase3_migration_is_non_destructive_to_existing_tables():
