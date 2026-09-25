@@ -48,6 +48,16 @@ jobs:
           DATABASE_URL: sqlite+aiosqlite:///./qa.db
           SCHEDULED_JOB_KEY: qa-test-key
         run: pytest -q tests/test_scheduled_job_boundary.py tests/test_phase2_qa.py tests/test_phase3_qa.py
+  deno-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Supabase read function
+        run: deno check supabase/functions/read-api/index.ts
+
   runtime-3-14:
     runs-on: ubuntu-latest
     defaults:
