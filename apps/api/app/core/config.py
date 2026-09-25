@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     # Phase 3C: AI-heavy workload migration remains opt-in during QA.
     durable_ai_workloads_enabled: bool = False
     durable_ai_worker_enabled: bool = False
+    # Phase 3D: move Phase 2 scheduled workload execution behind the same durable worker.
+    durable_scheduled_worker_enabled: bool = False
+    durable_scheduled_jobs_enabled: bool = False
+    durable_worker_poll_seconds: int = 5
+    durable_worker_lease_seconds: int = 600
 
     model_config = SettingsConfigDict(
         env_file=".env",
