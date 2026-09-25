@@ -278,7 +278,7 @@ def test_phase3_worker_is_not_started_by_fastapi():
 
     main = Path("app/main.py").read_text()
     assert "DurableJobWorker" not in main
-    assert "from app.services.durable_jobs import DurableJobService" not in main
+    assert "from app.jobs.durable_worker import" not in main
 
 
 @pytest.mark.asyncio
