@@ -53,6 +53,13 @@ def test_internal_job_key_is_fail_closed():
     assert "status_code=401" in source
 
 
+def test_internal_scheduler_endpoint_dispatches_long_running_jobs_in_background():
+    source = Path("app/main.py").read_text()
+    assert "background_tasks: BackgroundTasks" in source
+    assert "background_tasks.add_task(_run_scheduled_job_background, job_name)" in source
+    assert '"accepted": True' in source
+
+
 def test_internal_scheduler_endpoint_rejects_missing_and_wrong_keys():
     client = TestClient(app)
     assert client.post("/api/internal/scheduled-jobs/discovery").status_code == 401
