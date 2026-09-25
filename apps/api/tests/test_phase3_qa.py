@@ -444,3 +444,5 @@ async def test_exhausted_running_lease_becomes_terminal_failure(session_factory)
 # Phase 3 QA: lease recovery regression included.
 
 # Phase 3 QA: stale exhausted leases are terminal.
+
+# Final Phase 3 QA trigger.
