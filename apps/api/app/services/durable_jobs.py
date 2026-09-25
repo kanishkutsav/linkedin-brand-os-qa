@@ -107,7 +107,6 @@ class DurableJobService:
                     DurableJob.status == "RUNNING",
                     DurableJob.locked_at.is_not(None),
                     DurableJob.locked_at < lease_cutoff,
-                    DurableJob.attempts < DurableJob.max_attempts,
                 )
             )
             for job in stale.scalars().all():
