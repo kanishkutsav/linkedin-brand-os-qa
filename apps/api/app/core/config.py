@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     agent_in_process_schedule_enabled: bool = True
     scheduled_job_key: str | None = None
 
+    # Phase 3B: durable learning migration is opt-in until production-like QA passes.
+    durable_learning_enqueue_enabled: bool = False
+    durable_learning_worker_enabled: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
