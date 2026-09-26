@@ -135,9 +135,14 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text('ALTER TABLE brand_memory DROP COLUMN "audience_json"'))
             except Exception:
                 logger.warning("Could not drop retired brand_memory.audience_json")
-    agent_scheduler.start()
+    # Vercel functions are ephemeral. Supabase Cron owns scheduled execution
+    # in the Vercel deployment, so never start an in-process scheduler there.
+    vercel_runtime = os.getenv("VERCEL", "").lower() == "1"
+    if settings.agent_in_process_schedule_enabled and not vercel_runtime:
+        agent_scheduler.start()
     yield
-    await agent_scheduler.stop()
+    if settings.agent_in_process_schedule_enabled and not vercel_runtime:
+        await agent_scheduler.stop()
     await engine.dispose()
 
 
