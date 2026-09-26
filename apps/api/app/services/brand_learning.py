@@ -76,7 +76,15 @@ class BrandLearningService:
         )
         self.session.add(event)
         await self.session.flush()
-        await enqueue_learning_event(self.session, event_id=int(event.id), profile_id=int(profile_id))
+        # The free-tier path processes learning through the existing scheduler
+        # (Render) or the Supabase-Cron-triggered learning endpoint (Vercel).
+        # Only enqueue a durable job when the durable worker is actually enabled.
+        if settings.durable_learning_worker_enabled:
+            await enqueue_learning_event(
+                self.session,
+                event_id=int(event.id),
+                profile_id=int(profile_id),
+            )
         return event.id
 
     async def _embed_documents(self, texts: list[str]) -> list[list[float]]:
