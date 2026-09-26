@@ -1,0 +1,7 @@
+{
+  "name": "linkedin-brand-os",
+  "private": true,
+  "scripts": {
+    "build": "cd apps/web && npm install && npm run build"
+  }
+}
