@@ -1159,6 +1159,41 @@ async def execute_approval(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/approvals/{approval_id}/publication")
+async def publication_confirmation(
+    approval_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: AppUser = Depends(require_roles("admin", "reviewer", "owner", "user")),
+):
+    """Return the durable publication result for a user-owned approval."""
+    result = await session.execute(
+        select(ApprovalRequest)
+        .join(ContentVersion, ContentVersion.id == ApprovalRequest.content_version_id)
+        .join(ContentItem, ContentItem.id == ContentVersion.content_id)
+        .where(
+            ApprovalRequest.id == approval_id,
+            ContentItem.profile_id == int(current_user.id),
+        )
+    )
+    approval = result.scalar_one_or_none()
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+
+    return {
+        "id": approval.id,
+        "status": approval.status,
+        "published": approval.status == "EXECUTED",
+        "external_id": approval.published_external_id,
+        "image_urn": approval.published_image_urn,
+        "published_at": approval.published_at,
+        "message": (
+            "Published to LinkedIn."
+            if approval.status == "EXECUTED"
+            else "This post has not been published to LinkedIn."
+        ),
+    }
+
+
 @app.post("/api/approvals/{approval_id}/edit")
 async def edit_approval(
     approval_id: int,
