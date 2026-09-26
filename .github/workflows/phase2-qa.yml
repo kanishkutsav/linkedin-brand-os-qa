@@ -100,3 +100,9 @@ jobs:
           grep -q "Multi-user isolation" docs/phase8-production-cutover.md
           grep -q "Render OFF procedure" docs/phase8-production-cutover.md
           grep -q "healthCheckPath: /health/ready" render.yaml
+          test -s api/index.py
+          test -s requirements.txt
+          test -s vercel.json
+          grep -q '"outputDirectory": "apps/web/.next"' vercel.json
+          test -s supabase/migrations/20260926_phase8_vercel_cutover.sql
+          test -s supabase/migrations/20260926_phase8_vercel_cutover_rollback.sql
