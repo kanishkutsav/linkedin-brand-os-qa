@@ -19,7 +19,8 @@ def test_approval_status_contract():
  t=FN.read_text()
  for s in ("PENDING","EDITED","REGENERATED","APPROVED","EXECUTED","PUBLISHING","REJECTED"):assert s in t
 def test_no_ai_or_linkedin():
- t=FN.read_text();assert "ModelRouterService" not in t and "fetch(" not in t\n assert "publish" not in t.lower()
+ t=FN.read_text();assert "ModelRouterService" not in t and "fetch(" not in t
+ assert "publish" not in t.lower()
 def test_migration_scoped():
  t=MIG.read_text().lower();r=ROLL.read_text().lower()
  assert "create table if not exists public.mutation_requests" in t and "unique(user_id, operation, idempotency_key)" in t
