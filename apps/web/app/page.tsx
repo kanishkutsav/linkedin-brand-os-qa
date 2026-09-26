@@ -8,7 +8,7 @@ import {
   ShieldCheck, Sparkles, Target, TrendingUp, UserRound, WandSparkles, X, Zap
 } from 'lucide-react';
 
-const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') : '/api/backend';
+const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') : '';
 const STORAGE_KEY = 'brand-os-token';
 
 function getApiError(data: any, fallback: string) {
