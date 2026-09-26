@@ -74,7 +74,7 @@ def test_phase6_migration_is_additive_and_rollback_is_scoped():
 
 def test_phase6_has_explicit_worker_entrypoint():
     entrypoint = (API_ROOT / "app" / "durable_worker_main.py").read_text()
-    assert "No durable worker is enabled" in entrypoint
+    assert "No durable worker workloads are enabled" in entrypoint
     assert "build_durable_job_handlers" in entrypoint
     assert "allowed_job_types" in entrypoint
 
