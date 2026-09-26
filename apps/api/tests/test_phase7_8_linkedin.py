@@ -84,6 +84,7 @@ class TestPhase7LinkedIn(unittest.TestCase):
         self.assertIn("/health", routes)
         self.assertIn("/health/ready", routes)
         self.assertIn("/api/approvals/{approval_id}/publication", routes)
+        self.assertIn("/api/internal/scheduled-jobs/{job_name}", routes)
 
     def test_vercel_runtime_does_not_start_in_process_scheduler(self):
         with patch.dict(os.environ, {"VERCEL": "1"}, clear=False), \
