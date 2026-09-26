@@ -714,6 +714,7 @@ async def run_scheduled_job(
     job_name: str,
     _: None = Depends(_require_scheduled_job_key),
 ):
+    jobs = ScheduledJobs(SessionLocal)
     if job_name not in {"discovery", "calendar", "retention", "learning"}:
         raise HTTPException(status_code=404, detail="Unknown scheduled job.")
 
