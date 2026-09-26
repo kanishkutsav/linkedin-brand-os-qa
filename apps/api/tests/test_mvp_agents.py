@@ -8,7 +8,7 @@ from app.agents.voice import VoiceProfileBuilder
 class TestMVPAgents(unittest.TestCase):
     def test_strategy_service_recommends_content_mix(self):
         strategy = ContentStrategyService()
-        recommendations = strategy.recommend(goal="build authority in AI adoption", audience="senior product leaders")
+        recommendations = strategy.recommend("AI adoption")
 
         self.assertIn("content_mix", recommendations)
         self.assertIn("content_calendar", recommendations)
@@ -33,7 +33,6 @@ class TestMVPAgents(unittest.TestCase):
         service = ResearchService()
         pack = service.build_evidence_pack(
             topic="AI adoption in enterprise settings",
-            audience="engineering leaders",
             sources=[
                 {"title": "AI adoption guide", "url": "https://example.com/ai-guide", "summary": "Companies proceed in waves."},
                 {"title": "Leadership patterns", "url": "https://example.com/leadership", "summary": "Alignment matters more than hype."},

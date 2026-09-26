@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.models import LearningEvent, LearningMemory
 from app.services.gemini_service import ModelRouterService
 from app.models.models import UserProfile
+from app.jobs.durable_queue import enqueue_learning_event
 
 
 def _utcnow() -> datetime:
@@ -75,6 +76,7 @@ class BrandLearningService:
         )
         self.session.add(event)
         await self.session.flush()
+        await enqueue_learning_event(self.session, event_id=int(event.id), profile_id=int(profile_id))
         return event.id
 
     async def _embed_documents(self, texts: list[str]) -> list[list[float]]:

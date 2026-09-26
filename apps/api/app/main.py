@@ -7,6 +7,7 @@ import sqlite3
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -25,6 +26,7 @@ from app.core.config import settings
 from app.db.database import engine, get_session, SessionLocal
 from app.services.agent_scheduler import AgentScheduler
 from app.jobs.scheduled_jobs import ScheduledJobs
+from app.jobs.durable_queue import enqueue_job
 from app.services.brand_intelligence import BrandIntelligenceService
 from app.services.brand_learning import BrandLearningService
 from app.guards.guardrails import normalize_human_style, run_content_guards
@@ -694,13 +696,29 @@ async def run_scheduled_job(
     if job_name not in {"discovery", "calendar", "retention"}:
         raise HTTPException(status_code=404, detail="Unknown scheduled job.")
 
-    # Supabase pg_net has a short HTTP response timeout. The actual scheduled
-    # work can legitimately take longer because it may call an LLM for each
-    # ready profile. Queue the work in FastAPI's post-response background
-    # execution so Cron receives a fast acknowledgement while the existing
-    # durable AgentRun/idempotency guards protect the work itself.
+    if settings.durable_scheduled_worker_enabled:
+        local_date = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+        async with SessionLocal() as session:
+            job = await enqueue_job(
+                session,
+                job_type=f"scheduled_{job_name}",
+                payload={"mode": job_name, "scheduled_date": local_date},
+                idempotency_key=f"scheduled:{job_name}:{local_date}",
+            )
+            await session.commit()
+        return {
+            "ok": True,
+            "job": job_name,
+            "accepted": True,
+            "queued": True,
+            "job_id": job.id if job else None,
+        }
+
+    # Safe fallback while the durable worker is disabled. Supabase pg_net gets
+    # a fast response while the existing AgentRun/idempotency guards protect
+    # the actual scheduled work.
     _dispatch_scheduled_job(job_name)
-    return {"ok": True, "job": job_name, "accepted": True}
+    return {"ok": True, "job": job_name, "accepted": True, "queued": False}
 
 @app.post("/api/agent/events")
 async def trigger_agent_event(

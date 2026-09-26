@@ -44,6 +44,7 @@ async def main() -> None:
         allowed_job_types=allowed_job_types(),
         poll_interval_seconds=settings.durable_worker_poll_seconds,
         lease_seconds=settings.durable_worker_lease_seconds,
+        max_attempts=settings.durable_worker_max_attempts,
     )
     await worker.run_forever()
 

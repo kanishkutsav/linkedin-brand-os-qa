@@ -2,7 +2,7 @@ name: Phase 2 QA
 
 on:
   push:
-    branches: ["phase2-qa"]
+    branches: ["phase2-qa", "phase6-durable-worker-complete"]
   pull_request:
     branches: ["main"]
 
@@ -30,7 +30,7 @@ jobs:
         env:
           DATABASE_URL: sqlite+aiosqlite:///./qa.db
           SCHEDULED_JOB_KEY: qa-test-key
-        run: pytest -q tests/test_scheduled_job_boundary.py tests/test_phase2_qa.py
+        run: pytest -q tests
 
   scheduler-sql:
     runs-on: ubuntu-latest
@@ -57,3 +57,16 @@ jobs:
       - name: Compile application under production Python
         working-directory: apps/api
         run: python -m compileall -q app tests
+
+  durable-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Phase 6 durable queue migration
+        run: |
+          test -s supabase/migrations/20260926_phase6_durable_jobs.sql
+          grep -q "idempotency_key" supabase/migrations/20260926_phase6_durable_jobs.sql
+          grep -q "available_at" supabase/migrations/20260926_phase6_durable_jobs.sql
+          grep -q "locked_at" supabase/migrations/20260926_phase6_durable_jobs.sql
+          grep -q "attempts" supabase/migrations/20260926_phase6_durable_jobs.sql
+          test -s supabase/migrations/20260926_phase6_durable_jobs_rollback.sql
