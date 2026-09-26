@@ -260,6 +260,22 @@ async def health() -> dict[str, object]:
     }
 
 
+@app.get("/health/ready")
+async def readiness() -> dict[str, object]:
+    """Dependency-aware readiness probe for controlled Render fallback/cutover."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {
+            "status": "ready",
+            "database": "ok",
+            "environment": settings.environment,
+        }
+    except Exception:
+        logger.exception("Readiness check failed")
+        raise HTTPException(status_code=503, detail="Service dependencies are not ready")
+
+
 @app.get("/api/auth/linkedin/start")
 async def linkedin_oauth_start(
     browser_nonce: str | None = None,
