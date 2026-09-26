@@ -53,7 +53,7 @@ class TestAPIEndpoints(unittest.TestCase):
     def test_dashboard_and_approval_routes_are_registered(self):
         routes = {route.path for route in self.client.app.routes}
         self.assertIn("/api/dashboard/approvals", routes)
-        self.assertIn("/api/approvals/pending", routes)
+        self.assertIn("/api/approvals/{approval_id}/regenerate", routes)
 
 
 if __name__ == "__main__":
