@@ -5,7 +5,7 @@ from app.jobs.ai_workload_worker import build_ai_workload_handlers
 from app.jobs.durable_handlers import build_durable_job_handlers
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_phase6_ai_workloads_are_explicitly_opt_in():
