@@ -121,7 +121,7 @@ async def test_durable_worker_retries_transient_failure(durable_db):
 
 
 def test_phase3_6_core_boundaries_are_present():
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     assert (root / "apps/api/app/services/brand_learning.py").exists()
     assert (root / "apps/api/app/services/retention.py").exists()
     assert (root / "apps/api/app/services/approval.py").exists()
