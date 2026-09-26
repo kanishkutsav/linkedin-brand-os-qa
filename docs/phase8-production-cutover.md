@@ -4,9 +4,9 @@ This document is a QA/operations gate. It does not authorize a production cutove
 
 ## Target architecture
 
-- Vercel: frontend
+- Vercel: frontend + FastAPI execution
 - Supabase: database, authentication, persistent job state, scheduled jobs
-- Render: API fallback during the observation period
+- Render: temporary API fallback during the observation period
 - Durable worker: disabled unless a future paid/background-worker decision is made
 
 ## Cutover rule
@@ -70,13 +70,14 @@ The observation period should cover multiple daily cycles rather than a single s
 Only after every gate is green:
 
 1. Freeze the current production commit.
-2. Confirm Vercel points at that commit.
-3. Confirm Supabase migrations and cron jobs are healthy.
-4. Confirm the latest production database counts.
-5. Confirm no pending workflow operation depends on Render-specific state.
-6. Disable Render traffic/fallback.
-7. Monitor Vercel and Supabase for the next scheduled cycles.
-8. Keep the Render deployment recoverable until the cutover has been accepted.
+2. Confirm the Vercel project uses the repository root so both Next.js and FastAPI deploy together.
+3. Confirm Vercel points at that commit.
+4. Confirm Supabase migrations and cron jobs are healthy and the cron target is Vercel.
+5. Confirm the latest production database counts.
+6. Confirm no pending workflow operation depends on Render-specific state.
+7. Disable Render traffic/fallback.
+8. Monitor Vercel and Supabase for the next scheduled cycles.
+9. Keep the Render deployment recoverable until the cutover has been accepted.
 
 If any required gate fails, restore Render fallback and investigate before attempting the cutover again.
 
