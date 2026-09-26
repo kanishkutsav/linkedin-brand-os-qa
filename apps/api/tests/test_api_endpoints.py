@@ -50,11 +50,10 @@ class TestAPIEndpoints(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 410)
 
-    def test_dashboard_and_approval_routes_exist(self):
-        dashboard = self.client.get("/api/dashboard/approvals")
-        self.assertNotEqual(dashboard.status_code, 404)
-        pending = self.client.get("/api/approvals/pending")
-        self.assertNotEqual(pending.status_code, 404)
+    def test_dashboard_and_approval_routes_are_registered(self):
+        routes = {route.path for route in self.client.app.routes}
+        self.assertIn("/api/dashboard/approvals", routes)
+        self.assertIn("/api/approvals/pending", routes)
 
 
 if __name__ == "__main__":
