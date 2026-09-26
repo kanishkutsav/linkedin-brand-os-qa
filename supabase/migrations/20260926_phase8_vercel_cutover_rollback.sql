@@ -2,6 +2,7 @@
 select cron.unschedule('brand-os-daily-discovery');
 select cron.unschedule('brand-os-calendar-generation');
 select cron.unschedule('brand-os-daily-retention');
+select cron.unschedule('brand-os-learning-processing');
 
 select cron.schedule(
   'brand-os-daily-discovery',
