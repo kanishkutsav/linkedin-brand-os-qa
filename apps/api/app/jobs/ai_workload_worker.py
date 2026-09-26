@@ -21,6 +21,7 @@ def _require_int(payload: dict[str, Any], key: str) -> int:
 
 async def run_research_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     profile_id = _require_int(payload, "profile_id")
+    durable_job_id = _require_int(payload, "_durable_job_id")
     requested_topic = payload.get("requested_topic")
     candidate_limit = int(payload.get("candidate_limit", 8))
     candidate_limit = max(1, min(candidate_limit, 8))
@@ -30,6 +31,7 @@ async def run_research_discovery(payload: dict[str, Any]) -> dict[str, Any]:
             profile_id=profile_id,
             requested_topic=str(requested_topic).strip() if requested_topic else None,
             candidate_limit=candidate_limit,
+            durable_job_id=durable_job_id,
         )
 
     return {
@@ -54,12 +56,14 @@ async def run_content_improvement(payload: dict[str, Any]) -> dict[str, Any]:
 
 async def run_manual_content_generation(payload: dict[str, Any]) -> dict[str, Any]:
     profile_id = _require_int(payload, "profile_id")
+    durable_job_id = _require_int(payload, "_durable_job_id")
     async with SessionLocal() as session:
-        return await AgentOrchestrator(session, profile_id).run_manual_content_generation()
+        return await AgentOrchestrator(session, profile_id).run_manual_content_generation(durable_job_id=durable_job_id)
 
 
 async def run_approval_regeneration(payload: dict[str, Any]) -> dict[str, Any]:
     profile_id = _require_int(payload, "profile_id")
+    durable_job_id = _require_int(payload, "_durable_job_id")
     approval_id = _require_int(payload, "approval_id")
     feedback = payload.get("feedback")
 
@@ -68,6 +72,7 @@ async def run_approval_regeneration(payload: dict[str, Any]) -> dict[str, Any]:
             approval_id,
             str(feedback).strip() if feedback else None,
             profile_id,
+            durable_job_id=durable_job_id,
         )
 
     return {
