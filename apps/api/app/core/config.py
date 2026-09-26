@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     agent_in_process_schedule_enabled: bool = True
     scheduled_job_key: str | None = None
 
+    # Durable background worker. Disabled by default until explicit cutover.
+    durable_learning_worker_enabled: bool = False
+    durable_ai_worker_enabled: bool = False
+    durable_scheduled_worker_enabled: bool = False
+    durable_worker_poll_seconds: int = 5
+    durable_worker_lease_seconds: int = 300
+    durable_worker_max_attempts: int = 5
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
