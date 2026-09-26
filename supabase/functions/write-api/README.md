@@ -1,6 +1,6 @@
 # Brand OS write-api (Phase 5 QA)
 
-QA-only target runtime for transaction-safe, non-LinkedIn mutations.
+QA-only target runtime for retry-safe, non-LinkedIn mutations.
 
 Staged operations: create draft, learning thought, approve, edit, reject.
 
