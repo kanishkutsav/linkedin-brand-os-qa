@@ -64,6 +64,7 @@ class DurableJobWorker:
             payload = json.loads(job.payload_json or "{}")
             if not isinstance(payload, dict):
                 raise ValueError("Durable job payload must be a JSON object")
+            payload["_durable_job_id"] = job.id
             result = await handler(payload)
             await self.jobs.complete(job.id, lease_token=job.lease_token or "", result=result or {})
             logger.info("Durable job %s (%s) completed", job.id, job.job_type)
