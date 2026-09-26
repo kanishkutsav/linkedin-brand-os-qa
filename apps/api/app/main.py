@@ -260,6 +260,22 @@ async def health() -> dict[str, object]:
     }
 
 
+@app.get("/health/ready")
+async def readiness() -> dict[str, object]:
+    """Dependency-aware readiness probe for controlled Render fallback/cutover."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {
+            "status": "ready",
+            "database": "ok",
+            "environment": settings.environment,
+        }
+    except Exception:
+        logger.exception("Readiness check failed")
+        raise HTTPException(status_code=503, detail="Service dependencies are not ready")
+
+
 @app.get("/api/auth/linkedin/start")
 async def linkedin_oauth_start(
     browser_nonce: str | None = None,
@@ -1124,11 +1140,19 @@ async def execute_approval(
             image_bytes=image_bytes,
             image_mime=image_mime,
         )
+        # Return a durable publication confirmation so the UI can render
+        # success without inferring it from a transient HTTP response.
+        result = await session.execute(
+            select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+        )
+        saved_approval = result.scalar_one_or_none()
         return {
             "id": approval_id,
             "status": "EXECUTED" if publish_result.success else "APPROVED",
             "published": publish_result.success,
             "external_id": publish_result.external_id,
+            "image_urn": getattr(publish_result, "image_urn", None),
+            "published_at": saved_approval.published_at if saved_approval else None,
             "message": publish_result.message,
         }
     except ValueError as exc:

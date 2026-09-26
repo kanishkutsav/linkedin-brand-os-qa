@@ -223,3 +223,58 @@ CREATE INDEX IF NOT EXISTS idx_content_items_profile_id
 
 CREATE INDEX IF NOT EXISTS idx_agent_runs_user_id
     ON agent_runs(user_id);
+
+
+CREATE TABLE IF NOT EXISTS linkedin_connections (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES auth_users(id) ON DELETE CASCADE,
+    member_sub VARCHAR(255) NOT NULL UNIQUE,
+    access_token TEXT NOT NULL,
+    token_expires_at TIMESTAMPTZ,
+    linkedin_email VARCHAR(255),
+    linkedin_name VARCHAR(200),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_connections_user_id
+    ON linkedin_connections(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_connections_member_sub
+    ON linkedin_connections(member_sub);
+
+CREATE TABLE IF NOT EXISTS linkedin_oauth_states (
+    id SERIAL PRIMARY KEY,
+    state_hash VARCHAR(128) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_oauth_states_expires_at
+    ON linkedin_oauth_states(expires_at);
+
+CREATE TABLE IF NOT EXISTS linkedin_oauth_exchanges (
+    id SERIAL PRIMARY KEY,
+    code_hash VARCHAR(128) NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_oauth_exchanges_user_id
+    ON linkedin_oauth_exchanges(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_oauth_exchanges_expires_at
+    ON linkedin_oauth_exchanges(expires_at);
+
+ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS publish_started_at TIMESTAMPTZ;
+ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS published_external_id VARCHAR(255);
+ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS published_image_urn VARCHAR(255);
+ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_approval_requests_published_external_id
+    ON approval_requests(published_external_id);
+
+CREATE INDEX IF NOT EXISTS idx_approval_requests_published_at
+    ON approval_requests(published_at DESC);

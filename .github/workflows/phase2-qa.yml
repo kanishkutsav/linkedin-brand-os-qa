@@ -2,7 +2,7 @@ name: Phase 2 QA
 
 on:
   push:
-    branches: ["phase2-qa", "phase6-durable-worker-complete"]
+    branches: ["main", "phase2-qa", "phase6-durable-worker-complete", "phase7-8-qa"]
   pull_request:
     branches: ["main"]
 
@@ -70,3 +70,32 @@ jobs:
           grep -q "locked_at" supabase/migrations/20260926_phase6_durable_jobs.sql
           grep -q "attempts" supabase/migrations/20260926_phase6_durable_jobs.sql
           test -s supabase/migrations/20260926_phase6_durable_jobs_rollback.sql
+
+
+  phase7-linkedin-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Phase 7 LinkedIn migration
+        run: |
+          test -s supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "linkedin_connections" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "linkedin_oauth_states" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "linkedin_oauth_exchanges" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "published_external_id" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "published_image_urn" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          grep -q "published_at" supabase/migrations/20260926_phase7_linkedin_publish.sql
+          test -s supabase/migrations/20260926_phase7_linkedin_publish_rollback.sql
+          test -s apps/api/app/db/migrations/20260926_phase7_linkedin_publish.sql
+          test -s apps/api/app/db/migrations/20260926_phase7_linkedin_publish_rollback.sql
+
+  phase8-cutover-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Phase 8 cutover gates
+        run: |
+          test -s docs/phase8-production-cutover.md
+          grep -q "scheduled jobs" docs/phase8-production-cutover.md
+          grep -q "Multi-user isolation" docs/phase8-production-cutover.md
+          grep -q "Render OFF procedure" docs/phase8-production-cutover.md
