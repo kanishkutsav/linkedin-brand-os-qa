@@ -1134,8 +1134,8 @@ async def execute_approval(
             image_bytes = await image.read()
             if not image_bytes:
                 raise ValueError("The selected image is empty.")
-            if len(image_bytes) > 10 * 1024 * 1024:
-                raise ValueError("Image must be 10 MB or smaller.")
+            if len(image_bytes) > 4 * 1024 * 1024:
+                raise ValueError("Image must be 4 MB or smaller.")
 
         publish_adapter = OfficialLinkedInAdapter(connection.access_token, connection.member_sub)
         publish_result = await ApprovalService(session).execute(
