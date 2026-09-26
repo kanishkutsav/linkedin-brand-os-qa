@@ -3,6 +3,7 @@ services:
     name: linkedin-brand-os-api
     env: python
     plan: free
+    healthCheckPath: /health/ready
     buildCommand: "cd apps/api && pip install -r requirements.txt"
     startCommand: "cd apps/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
@@ -26,9 +27,17 @@ services:
         sync: false
       - key: LINKEDIN_API_BASE_URL
         sync: false
+      - key: LINKEDIN_API_VERSION
+        value: "202609"
+      - key: LINKEDIN_REDIRECT_URI
+        sync: false
+      - key: LINKEDIN_ANALYTICS_OAUTH_ENABLED
+        value: "false"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: API_BASE_URL
         sync: false
