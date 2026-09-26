@@ -5,7 +5,7 @@ from app.jobs.ai_workload_worker import build_ai_workload_handlers
 from app.jobs.durable_handlers import build_durable_job_handlers
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_phase6_ai_workloads_are_explicitly_opt_in():
@@ -52,7 +52,7 @@ def test_phase6_worker_uses_lease_fencing():
 
 def test_phase6_migration_is_additive_and_rollback_is_scoped():
     migration = (
-        ROOT.parent.parent
+        ROOT
         / "supabase"
         / "migrations"
         / "20260926_phase6_durable_job_fencing.sql"
