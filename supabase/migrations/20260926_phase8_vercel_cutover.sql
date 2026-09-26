@@ -7,6 +7,7 @@
 select cron.unschedule('brand-os-daily-discovery');
 select cron.unschedule('brand-os-calendar-generation');
 select cron.unschedule('brand-os-daily-retention');
+select cron.unschedule('brand-os-learning-processing');
 
 select cron.schedule(
   'brand-os-daily-discovery',
@@ -33,6 +34,17 @@ select cron.schedule(
   '0 4 * * *',
   $$select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name = 'brand_os_vercel_url') || '/api/internal/scheduled-jobs/retention',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'X-Brand-OS-Job-Key', (select decrypted_secret from vault.decrypted_secrets where name = 'brand_os_job_key')),
+    body := jsonb_build_object('source', 'supabase_cron', 'execution_target', 'vercel')
+  )$$
+);
+
+
+select cron.schedule(
+  'brand-os-learning-processing',
+  '*/15 * * * *',
+  $$select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'brand_os_vercel_url') || '/api/internal/scheduled-jobs/learning',
     headers := jsonb_build_object('Content-Type', 'application/json', 'X-Brand-OS-Job-Key', (select decrypted_secret from vault.decrypted_secrets where name = 'brand_os_job_key')),
     body := jsonb_build_object('source', 'supabase_cron', 'execution_target', 'vercel')
   )$$
