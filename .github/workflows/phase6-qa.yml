@@ -1,0 +1,49 @@
+name: Phase 6 QA
+on:
+  push:
+    branches: ["phase3-qa"]
+  pull_request:
+    branches: ["main"]
+jobs:
+  workload-contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run: {working-directory: apps/api}
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./qa.db
+      SCHEDULED_JOB_KEY: qa-test-key
+      PYTHONPATH: ${{ github.workspace }}/apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+      - name: Compile backend
+        run: python -m compileall -q app tests
+      - name: Run Phase 6 contract tests
+        run: pytest -q tests/test_phase6_qa.py
+
+  regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run: {working-directory: apps/api}
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./qa.db
+      SCHEDULED_JOB_KEY: qa-test-key
+      PYTHONPATH: ${{ github.workspace }}/apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+      - name: Run Phase 2 + 3 + 4 + 5 + 6 regression
+        run: pytest -q tests/test_scheduled_job_boundary.py tests/test_phase2_qa.py tests/test_phase3_qa.py tests/test_phase4_qa.py tests/test_phase5_qa.py tests/test_phase6_qa.py
