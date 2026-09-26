@@ -737,8 +737,9 @@ async def trigger_agent_event(
     current_user: AppUser = Depends(require_roles("admin", "owner", "user")),
 ):
     if req.event_type == "manual_generate_content" and settings.durable_ai_workloads_enabled:
-        import uuid
-        key = request.headers.get("X-Idempotency-Key") or str(uuid.uuid4())
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued content generation.")
         job, created = await _enqueue_durable_job(
             job_type="manual_content_generation",
             idempotency_key=f"manual-content:{int(current_user.id)}:{key}",
@@ -820,8 +821,9 @@ async def research_discover(
     current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
 ):
     if settings.durable_ai_workloads_enabled:
-        import uuid
-        key = request.headers.get("X-Idempotency-Key") or str(uuid.uuid4())
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued research.")
         job, created = await _enqueue_durable_job(
             job_type="research_discovery",
             idempotency_key=f"research:{int(current_user.id)}:{key}",
@@ -904,8 +906,9 @@ async def improve_content(
     current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
 ):
     if settings.durable_ai_workloads_enabled:
-        import uuid
-        key = request.headers.get("X-Idempotency-Key") or str(uuid.uuid4())
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued content improvement.")
         job, created = await _enqueue_durable_job(
             job_type="content_improvement",
             idempotency_key=f"content-improve:{int(current_user.id)}:{key}",
@@ -1188,10 +1191,9 @@ async def regenerate_approval(
     current_user: AppUser = Depends(require_roles("admin", "reviewer", "owner", "user")),
 ):
     if settings.durable_ai_workloads_enabled:
-        import uuid, hashlib
         key = request.headers.get("X-Idempotency-Key")
         if not key:
-            key = hashlib.sha256(f"{approval_id}:{req.reason or ''}".encode("utf-8")).hexdigest()
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued regeneration.")
         job, created = await _enqueue_durable_job(
             job_type="approval_regeneration",
             idempotency_key=f"approval-regenerate:{int(current_user.id)}:{approval_id}:{key}",
