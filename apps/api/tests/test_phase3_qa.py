@@ -205,7 +205,8 @@ async def test_worker_dispatches_handler_and_records_result(session_factory):
     )
 
     assert await worker.run_once() is True
-    assert seen == [{"value": 42}]
+    assert seen[0]["value"] == 42
+    assert seen[0]["_durable_job_id"] == job.id
 
     async with session_factory() as session:
         stored = await session.get(DurableJob, job.id)
@@ -281,7 +282,7 @@ async def test_ai_workload_handlers_validate_payloads():
         await handlers["research_discovery"]({})
 
     with pytest.raises(ValueError, match="approval_id"):
-        await handlers["approval_regeneration"]({"profile_id": 1})
+        await handlers["approval_regeneration"]({"profile_id": 1, "_durable_job_id": 1})
 
 
 def test_phase3c_ai_workloads_are_opt_in():
