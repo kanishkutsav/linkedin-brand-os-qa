@@ -714,8 +714,37 @@ async def run_scheduled_job(
     job_name: str,
     _: None = Depends(_require_scheduled_job_key),
 ):
-    if job_name not in {"discovery", "calendar", "retention"}:
+    if job_name not in {"discovery", "calendar", "retention", "learning"}:
         raise HTTPException(status_code=404, detail="Unknown scheduled job.")
+
+    if job_name == "learning":
+        if settings.durable_learning_worker_enabled:
+            local_date = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+            async with SessionLocal() as session:
+                job = await enqueue_job(
+                    session,
+                    job_type="brand_learning_event",
+                    payload={"scheduled_date": local_date},
+                    idempotency_key=f"scheduled:learning:{local_date}",
+                )
+                await session.commit()
+            return {
+                "ok": True,
+                "job": job_name,
+                "accepted": True,
+                "queued": True,
+                "job_id": job.id if job else None,
+            }
+
+        async with SessionLocal() as session:
+            try:
+                processed = await jobs.process_learning(session, limit=50)
+                await session.commit()
+                logger.info("Scheduled learning job completed: processed=%s", processed)
+            except Exception:
+                await session.rollback()
+                logger.exception("Scheduled learning job failed.")
+        return
 
     if settings.durable_scheduled_worker_enabled:
         local_date = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
