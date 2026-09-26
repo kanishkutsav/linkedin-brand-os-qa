@@ -99,3 +99,4 @@ jobs:
           grep -q "scheduled jobs" docs/phase8-production-cutover.md
           grep -q "Multi-user isolation" docs/phase8-production-cutover.md
           grep -q "Render OFF procedure" docs/phase8-production-cutover.md
+          grep -q "healthCheckPath: /health/ready" render.yaml
