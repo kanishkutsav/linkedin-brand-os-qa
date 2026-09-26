@@ -1,4 +1,5 @@
 name: Phase 2 QA
+# CI verification trigger: keep this workflow on every QA-main change.
 
 on:
   push:
