@@ -2,8 +2,8 @@
 -- This migration is additive and safe to run on an existing database.
 
 CREATE TABLE IF NOT EXISTS linkedin_connections (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL UNIQUE REFERENCES auth_users(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES auth_users(id) ON DELETE CASCADE,
     member_sub VARCHAR(255) NOT NULL UNIQUE,
     access_token TEXT NOT NULL,
     token_expires_at TIMESTAMPTZ,
@@ -20,7 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_linkedin_connections_member_sub
     ON linkedin_connections(member_sub);
 
 CREATE TABLE IF NOT EXISTS linkedin_oauth_states (
-    id BIGSERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     state_hash VARCHAR(128) NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -30,9 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_linkedin_oauth_states_expires_at
     ON linkedin_oauth_states(expires_at);
 
 CREATE TABLE IF NOT EXISTS linkedin_oauth_exchanges (
-    id BIGSERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     code_hash VARCHAR(128) NOT NULL UNIQUE,
-    user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
     used BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
