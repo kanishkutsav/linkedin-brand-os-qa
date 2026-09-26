@@ -300,9 +300,27 @@ class ApprovalService:
             await self.session.commit()
         return approval
 
-    async def regenerate(self, approval_id: int, feedback: str | None = None, profile_id: int | None = None):
+    async def regenerate(self, approval_id: int, feedback: str | None = None, profile_id: int | None = None, durable_job_id: int | None = None):
         if profile_id is None:
             raise ValueError("Profile ownership is required")
+        if durable_job_id is not None:
+            marker_result = await self.session.execute(
+                select(AuditLog).where(
+                    AuditLog.event_type == "DURABLE_AI_RESULT",
+                    AuditLog.actor == "durable-ai-worker",
+                ).order_by(AuditLog.id.desc())
+            )
+            for marker in marker_result.scalars():
+                try:
+                    data = json.loads(marker.payload or "{}")
+                except json.JSONDecodeError:
+                    continue
+                if data.get("job_id") == durable_job_id and data.get("job_type") == "approval_regeneration":
+                    stored = data.get("result", {})
+                    approval = await self._get_owned_approval(approval_id, profile_id)
+                    if approval:
+                        return approval
+                    raise ValueError("Approval no longer exists")
         approval = await self._get_owned_approval(approval_id, profile_id)
         if not approval or approval.status not in {"PENDING", "EDITED", "REGENERATED"}:
             raise ValueError("Approval is not regenerable in its current state")
@@ -414,6 +432,25 @@ class ApprovalService:
             actor="system",
             payload=f"approval={approval.id};feedback={(feedback or '').strip()[:500]}",
         ))
+        if durable_job_id is not None:
+            self.session.add(
+                AuditLog(
+                    event_type="DURABLE_AI_RESULT",
+                    actor="durable-ai-worker",
+                    payload=json.dumps(
+                        {
+                            "job_id": durable_job_id,
+                            "job_type": "approval_regeneration",
+                            "result": {
+                                "approval_id": approval.id,
+                                "status": approval.status,
+                                "reason": approval.reason,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
         await self.session.commit()
         return approval
 
