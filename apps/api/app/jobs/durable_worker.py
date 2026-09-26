@@ -53,6 +53,7 @@ class DurableJobWorker:
         if handler is None:
             await self.jobs.fail(
                 job.id,
+                lease_token=job.lease_token or "",
                 error=f"No handler registered for job type: {job.job_type}",
                 retry_delay_seconds=0,
                 retryable=False,
@@ -64,12 +65,13 @@ class DurableJobWorker:
             if not isinstance(payload, dict):
                 raise ValueError("Durable job payload must be a JSON object")
             result = await handler(payload)
-            await self.jobs.complete(job.id, result=result or {})
+            await self.jobs.complete(job.id, lease_token=job.lease_token or "", result=result or {})
             logger.info("Durable job %s (%s) completed", job.id, job.job_type)
         except Exception as exc:
             delay = min(3600, 2 ** max(job.attempts - 1, 0) * 60)
             await self.jobs.fail(
                 job.id,
+                lease_token=job.lease_token or "",
                 error=f"{type(exc).__name__}: {exc}",
                 retry_delay_seconds=delay,
             )
