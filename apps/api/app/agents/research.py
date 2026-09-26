@@ -12,7 +12,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import ContentItem, ContentOpportunity, ResearchSource, UserProfile
+from app.models.models import AuditLog, ContentItem, ContentOpportunity, ResearchSource, UserProfile
 from app.services.brand_intelligence import BrandIntelligenceService
 from app.services.gemini_service import ModelRouterService
 from app.services.brand_learning import BrandLearningService
@@ -191,10 +191,25 @@ class ResearchService:
         profile_id: int,
         requested_topic: str | None = None,
         candidate_limit: int = 8,
+        durable_job_id: int | None = None,
     ) -> list[dict]:
         if self.session is None:
             raise ValueError("A database session is required for live research.")
 
+        if durable_job_id is not None:
+            marker_result = await self.session.execute(
+                select(AuditLog).where(
+                    AuditLog.event_type == "DURABLE_AI_RESULT",
+                    AuditLog.actor == "durable-ai-worker",
+                ).order_by(AuditLog.id.desc())
+            )
+            for marker in marker_result.scalars():
+                try:
+                    data = json.loads(marker.payload or "{}")
+                except json.JSONDecodeError:
+                    continue
+                if data.get("job_id") == durable_job_id and data.get("job_type") == "research_discovery":
+                    return data.get("result", {}).get("opportunities", [])
         profile = await self.session.get(UserProfile, profile_id)
         if profile is None:
             raise ValueError("Profile is not initialized.")
@@ -414,6 +429,18 @@ Generate 6-8 genuinely different opportunities. Every opportunity must cite at l
 
         await self.session.commit()
         created.sort(key=lambda item: item["total_score"], reverse=True)
+        if durable_job_id is not None:
+            self.session.add(
+                AuditLog(
+                    event_type="DURABLE_AI_RESULT",
+                    actor="durable-ai-worker",
+                    payload=json.dumps(
+                        {"job_id": durable_job_id, "job_type": "research_discovery", "result": {"opportunities": created}},
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+        await self.session.commit()
         return created
 
     async def list_opportunities(self, profile_id: int, limit: int = 20) -> list[dict]:
