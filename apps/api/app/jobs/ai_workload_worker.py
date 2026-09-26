@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
+import json
+
+from app.models.models import AuditLog
+
 from app.db.database import SessionLocal
 from app.agents.orchestrator import AgentOrchestrator
 from app.agents.research import ResearchService
@@ -43,8 +48,25 @@ async def run_research_discovery(payload: dict[str, Any]) -> dict[str, Any]:
 
 async def run_content_improvement(payload: dict[str, Any]) -> dict[str, Any]:
     profile_id = _require_int(payload, "profile_id")
+    durable_job_id = _require_int(payload, "_durable_job_id")
     async with SessionLocal() as session:
-        return await ContentAIService().improve(
+        marker_result = await session.execute(
+            select(AuditLog)
+            .where(
+                AuditLog.event_type == "DURABLE_AI_RESULT",
+                AuditLog.actor == "durable-ai-worker",
+            )
+            .order_by(AuditLog.id.desc())
+        )
+        for marker in marker_result.scalars():
+            try:
+                data = json.loads(marker.payload or "{}")
+            except json.JSONDecodeError:
+                continue
+            if data.get("job_id") == durable_job_id and data.get("job_type") == "content_improvement":
+                return data.get("result") or {}
+
+        result = await ContentAIService().improve(
             session,
             profile_id=profile_id,
             title=str(payload.get("title") or ""),
@@ -52,6 +74,18 @@ async def run_content_improvement(payload: dict[str, Any]) -> dict[str, Any]:
             body=str(payload.get("body") or ""),
             language=str(payload.get("language")) if payload.get("language") else None,
         )
+        session.add(
+            AuditLog(
+                event_type="DURABLE_AI_RESULT",
+                actor="durable-ai-worker",
+                payload=json.dumps(
+                    {"job_id": durable_job_id, "job_type": "content_improvement", "result": result},
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        await session.commit()
+        return result
 
 
 async def run_manual_content_generation(payload: dict[str, Any]) -> dict[str, Any]:
