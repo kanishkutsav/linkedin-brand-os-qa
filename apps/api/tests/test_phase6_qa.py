@@ -97,3 +97,10 @@ def test_phase6_read_runtime_exposes_user_scoped_job_status():
     assert "durableJobRead" in read_api
     assert '.eq("user_id", user.id)' in read_api
     assert 'durable-jobs\\/(\\d+)' in read_api
+
+
+def test_phase6_ai_handlers_use_replay_markers():
+    worker = (ROOT / "app" / "jobs" / "ai_workload_worker.py").read_text()
+    assert "DURABLE_AI_RESULT" in worker
+    assert "content_improvement" in worker
+    assert "_durable_job_id" in worker
