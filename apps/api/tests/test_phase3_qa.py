@@ -66,9 +66,11 @@ async def test_claim_complete_lifecycle(session_factory):
     assert claimed.id == job.id
     assert claimed.status == "RUNNING"
     assert claimed.attempts == 1
+    assert claimed.lease_token
 
     completed = await service.complete(
         claimed.id,
+        lease_token=claimed.lease_token or "",
         result={"ok": True},
     )
     assert completed.status == "SUCCEEDED"
@@ -92,6 +94,7 @@ async def test_failure_requeues_then_eventually_becomes_terminal(session_factory
 
     retrying = await service.fail(
         claimed.id,
+        lease_token=claimed.lease_token or "",
         error="temporary provider failure",
         retry_delay_seconds=0,
     )
@@ -104,6 +107,7 @@ async def test_failure_requeues_then_eventually_becomes_terminal(session_factory
 
     failed = await service.fail(
         claimed_again.id,
+        lease_token=claimed_again.lease_token or "",
         error="permanent failure",
         retry_delay_seconds=0,
     )
@@ -135,6 +139,47 @@ async def test_expired_running_lease_is_reclaimed(session_factory):
     assert reclaimed.id == job.id
     assert reclaimed.status == "RUNNING"
     assert reclaimed.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_worker_cannot_complete_after_lease_reclaim(session_factory):
+    service = DurableJobService(session_factory)
+    job, _ = await service.enqueue(
+        job_type="fenced",
+        idempotency_key="fenced-stale-worker",
+        max_attempts=3,
+    )
+
+    first = await service.claim_next()
+    assert first is not None
+    stale_token = first.lease_token
+    assert stale_token
+
+    async with session_factory() as session:
+        stored = await session.get(DurableJob, job.id)
+        assert stored is not None
+        stored.locked_at = utcnow() - timedelta(seconds=601)
+        await session.commit()
+
+    second = await service.claim_next(lease_seconds=600)
+    assert second is not None
+    assert second.id == job.id
+    assert second.lease_token
+    assert second.lease_token != stale_token
+
+    with pytest.raises(ValueError, match="lease is no longer valid"):
+        await service.complete(
+            job.id,
+            lease_token=stale_token,
+            result={"stale": True},
+        )
+
+    completed = await service.complete(
+        job.id,
+        lease_token=second.lease_token,
+        result={"stale": False},
+    )
+    assert completed.status == "SUCCEEDED"
 
 
 @pytest.mark.asyncio
