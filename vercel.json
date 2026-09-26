@@ -3,10 +3,5 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/.next",
-  "installCommand": "python -m pip install -r requirements.txt",
-  "functions": {
-    "api/index.py": {
-      "runtime": "python3.12"
-    }
-  }
+  "installCommand": "python -m pip install -r requirements.txt"
 }
