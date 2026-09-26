@@ -1,6 +1,7 @@
 import json
+import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.core.config import settings
 from app.integrations.linkedin import MockLinkedInAdapter, OfficialLinkedInAdapter
@@ -83,6 +84,17 @@ class TestPhase7LinkedIn(unittest.TestCase):
         self.assertIn("/health", routes)
         self.assertIn("/health/ready", routes)
         self.assertIn("/api/approvals/{approval_id}/publication", routes)
+
+    def test_vercel_runtime_does_not_start_in_process_scheduler(self):
+        with patch.dict(os.environ, {"VERCEL": "1"}, clear=False), \
+             patch("app.main.agent_scheduler.start") as start, \
+             patch("app.main.agent_scheduler.stop", new_callable=AsyncMock) as stop:
+            from fastapi.testclient import TestClient
+            with TestClient(app) as client:
+                response = client.get("/health")
+                self.assertEqual(response.status_code, 200)
+        start.assert_not_called()
+        stop.assert_not_awaited()
 
     def test_linkedin_api_version_is_configurable(self):
         self.assertTrue(settings.linkedin_api_version)
