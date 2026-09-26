@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -111,6 +112,7 @@ class DurableJobService:
             )
             for job in stale.scalars().all():
                 job.locked_at = None
+                job.lease_token = None
                 if job.attempts >= job.max_attempts:
                     job.status = "FAILED"
                     job.finished_at = now
@@ -152,6 +154,7 @@ class DurableJobService:
             job.status = "RUNNING"
             job.attempts += 1
             job.locked_at = now
+            job.lease_token = uuid.uuid4().hex
             job.updated_at = now
             await session.commit()
             await session.refresh(job)
@@ -161,6 +164,7 @@ class DurableJobService:
         self,
         job_id: int,
         *,
+        lease_token: str,
         result: dict[str, Any] | None = None,
     ) -> DurableJob:
         async with self.session_factory() as session:
@@ -169,12 +173,15 @@ class DurableJobService:
                 raise ValueError(f"Unknown durable job: {job_id}")
             if job.status != "RUNNING":
                 raise ValueError(f"Job {job_id} is not RUNNING")
+            if not lease_token or job.lease_token != lease_token:
+                raise ValueError(f"Job {job_id} lease is no longer valid")
 
             now = utcnow()
             job.status = "SUCCEEDED"
             job.result_json = json.dumps(result or {}, separators=(",", ":"), sort_keys=True)
             job.last_error = None
             job.locked_at = None
+            job.lease_token = None
             job.finished_at = now
             job.updated_at = now
             await session.commit()
@@ -185,6 +192,7 @@ class DurableJobService:
         self,
         job_id: int,
         *,
+        lease_token: str,
         error: str,
         retry_delay_seconds: int = 60,
         retryable: bool = True,
@@ -198,10 +206,13 @@ class DurableJobService:
                 raise ValueError(f"Unknown durable job: {job_id}")
             if job.status != "RUNNING":
                 raise ValueError(f"Job {job_id} is not RUNNING")
+            if not lease_token or job.lease_token != lease_token:
+                raise ValueError(f"Job {job_id} lease is no longer valid")
 
             now = utcnow()
             job.last_error = (error or "Unknown job failure")[:10000]
             job.locked_at = None
+            job.lease_token = None
             job.updated_at = now
 
             if retryable and job.attempts < job.max_attempts:
