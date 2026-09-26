@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.orchestrator import AgentOrchestrator
 from app.jobs.durable_queue import enqueue_job
@@ -49,7 +49,8 @@ async def _approval_regeneration(session: AsyncSession, job: DurableJob, payload
 async def _scheduled(session: AsyncSession, job: DurableJob, payload: dict) -> dict:
     mode = payload.get("mode")
     if mode in {"discovery", "calendar"}:
-        return await ScheduledJobs(session.bind).run(mode)
+        factory = async_sessionmaker(session.bind, expire_on_commit=False, class_=AsyncSession)
+        return await ScheduledJobs(factory).run(mode)
     if mode == "retention":
         return await ScheduledJobs(session.bind).process_retention(session)
     raise ValueError(f"Unsupported durable scheduled mode: {mode}")
