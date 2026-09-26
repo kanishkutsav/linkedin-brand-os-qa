@@ -430,6 +430,7 @@ class ApprovalService:
                 success=True,
                 external_id=approval.published_external_id,
                 message="This post was already published to LinkedIn.",
+                image_urn=approval.published_image_urn,
             )
 
         # A concurrent request may already own the publication attempt.
@@ -484,6 +485,7 @@ class ApprovalService:
         if result.success:
             approval.published_external_id = result.external_id
             approval.published_image_urn = getattr(result, "image_urn", None)
+            approval.published_at = datetime.now(timezone.utc)
             item = await self.session.get(ContentItem, version.content_id)
             if item:
                 item.status = "PUBLISHED"
