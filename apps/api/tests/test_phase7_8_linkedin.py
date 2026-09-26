@@ -82,6 +82,7 @@ class TestPhase7LinkedIn(unittest.TestCase):
         routes = {route.path for route in app.routes}
         self.assertIn("/health", routes)
         self.assertIn("/health/ready", routes)
+        self.assertIn("/api/approvals/{approval_id}/publication", routes)
 
     def test_linkedin_api_version_is_configurable(self):
         self.assertTrue(settings.linkedin_api_version)
