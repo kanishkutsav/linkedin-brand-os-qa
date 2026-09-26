@@ -913,7 +913,7 @@ function ApprovalWorkspace(props: any) {
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      window.alert('Image must be 10 MB or smaller.');
+      window.alert('Image must be 4 MB or smaller.');
       return;
     }
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -997,7 +997,7 @@ function ApprovalWorkspace(props: any) {
                 <div className="readonly-field" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65, minHeight: 150 }}>{selected.content}</div>
                 <div style={{ marginTop: 14, padding: 12, border: '1px dashed #d0d5dd', borderRadius: 12, background: '#fafafa' }}>
                   <div className="review-label" style={{ marginBottom: 7 }}>Optional photograph</div>
-                  <div className="form-help" style={{ marginBottom: 9 }}>Add one JPEG or PNG image (up to 10 MB). The image is sent directly to LinkedIn during execution and is not stored by Brand OS.</div>
+                  <div className="form-help" style={{ marginBottom: 9 }}>Add one JPEG or PNG image (up to 4 MB). The image is sent directly to LinkedIn during execution and is not stored by Brand OS.</div>
                   <input type="file" accept="image/jpeg,image/png" onChange={(e) => chooseImage(e.target.files?.[0] || null)} disabled={isBusy} />
                   {imagePreview && (
                     <div style={{ marginTop: 10 }}>
