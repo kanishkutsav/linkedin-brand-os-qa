@@ -333,7 +333,7 @@ class AgentOrchestrator:
             "created_count": len(created),
         }
 
-    async def run_manual_content_generation(self, trigger: str = "manual_generate_content") -> dict:
+    async def run_manual_content_generation(self, trigger: str = "manual_generate_content", durable_job_id: int | None = None) -> dict:
         """Generate a fresh draft without making live research a prerequisite.
 
         Manual content generation is intentionally independent from the live
@@ -341,6 +341,20 @@ class AgentOrchestrator:
         Generate Content should still receive a draft from their Brand DNA
         when the public-news feed or research provider is unavailable.
         """
+        if durable_job_id is not None:
+            marker_result = await self.session.execute(
+                select(AuditLog).where(
+                    AuditLog.event_type == "DURABLE_AI_RESULT",
+                    AuditLog.actor == "durable-ai-worker",
+                ).order_by(AuditLog.id.desc())
+            )
+            for marker in marker_result.scalars():
+                try:
+                    data = json.loads(marker.payload or "{}")
+                except json.JSONDecodeError:
+                    continue
+                if data.get("job_id") == durable_job_id and data.get("job_type") == "manual_content_generation":
+                    return data.get("result", {})
         profile = await self._profile()
         brand = BrandIntelligenceService(self.session)
         positioning = profile.professional_title or profile.industry or "professional expertise"
@@ -454,6 +468,27 @@ class AgentOrchestrator:
                 )
             )
 
+        if durable_job_id is not None:
+            result_payload = {
+                "mode": "manual_content",
+                "trigger": trigger,
+                "created_content_ids": [item.id],
+                "created_count": 1,
+                "content_id": item.id,
+                "title": final_title,
+                "approval_queued": approval_queued,
+                "blocked_by_guardrails": not guard.passed,
+            }
+            self.session.add(
+                AuditLog(
+                    event_type="DURABLE_AI_RESULT",
+                    actor="durable-ai-worker",
+                    payload=json.dumps(
+                        {"job_id": durable_job_id, "job_type": "manual_content_generation", "result": result_payload},
+                        ensure_ascii=False,
+                    ),
+                )
+            )
         await self.session.commit()
         return {
             "mode": "manual_content",
