@@ -33,6 +33,8 @@ class DurableJob(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Fencing token: prevents a stale worker from completing/failing a job after its lease was reclaimed.
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
