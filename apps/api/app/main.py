@@ -7,6 +7,7 @@ import sqlite3
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request, File, UploadFile, Header
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -36,6 +37,7 @@ from app.services.auth_service import AppUser, AuthService
 from app.services.linkedin_oauth import build_authorization_url, exchange_code, handle_callback
 from app.services.linkedin_analytics import LinkedInAnalyticsService
 from app.services.gemini_service import ModelRouterService
+from app.services.content_ai import ContentAIService
 
 logger = logging.getLogger(__name__)
 
@@ -694,20 +696,58 @@ async def run_scheduled_job(
     if job_name not in {"discovery", "calendar", "retention"}:
         raise HTTPException(status_code=404, detail="Unknown scheduled job.")
 
-    # Supabase pg_net has a short HTTP response timeout. The actual scheduled
-    # work can legitimately take longer because it may call an LLM for each
-    # ready profile. Queue the work in FastAPI's post-response background
-    # execution so Cron receives a fast acknowledgement while the existing
-    # durable AgentRun/idempotency guards protect the work itself.
+    if settings.durable_scheduled_jobs_enabled:
+        ist_day = datetime.now(ZoneInfo(settings.agent_timezone)).strftime("%Y-%m-%d")
+        job, created = await _enqueue_durable_job(
+            job_type=f"scheduled_{job_name}",
+            idempotency_key=f"scheduled:{job_name}:{ist_day}",
+            user_id=None,
+            payload={"mode": job_name},
+        )
+        return {"ok": True, "job": job_name, "accepted": True, "queued": True, "job_id": job.id, "created": created}
+
+    # Compatibility path used while Phase 3 is being validated. Supabase
+    # receives a fast acknowledgement and the existing Phase 2 execution path
+    # remains untouched until the durable worker is explicitly enabled.
     _dispatch_scheduled_job(job_name)
-    return {"ok": True, "job": job_name, "accepted": True}
+    return {"ok": True, "job": job_name, "accepted": True, "queued": False}
+
+async def _enqueue_durable_job(
+    *,
+    job_type: str,
+    idempotency_key: str,
+    user_id: int | None,
+    payload: dict[str, object],
+):
+    from app.services.durable_jobs import DurableJobService
+    return await DurableJobService(SessionLocal).enqueue(
+        job_type=job_type,
+        idempotency_key=idempotency_key,
+        user_id=user_id,
+        payload=payload,
+        max_attempts=3,
+    )
+
 
 @app.post("/api/agent/events")
 async def trigger_agent_event(
     req: AgentEventRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: AppUser = Depends(require_roles("admin", "owner", "user")),
 ):
+    if req.event_type == "manual_generate_content" and settings.durable_ai_workloads_enabled:
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued content generation.")
+        job, created = await _enqueue_durable_job(
+            job_type="manual_content_generation",
+            idempotency_key=f"manual-content:{int(current_user.id)}:{key}",
+            user_id=int(current_user.id),
+            payload={"profile_id": int(current_user.id)},
+        )
+        return {"queued": True, "job_id": job.id, "status": job.status, "created": created}
+
     run = AgentRun(user_id=int(current_user.id), mode="event", trigger=f"event:{req.event_type}", status="RUNNING")
     session.add(run)
     await session.flush()
@@ -731,6 +771,40 @@ async def trigger_agent_event(
         raise HTTPException(status_code=500, detail="Agent event processing failed") from exc
 
 
+async def _get_durable_job_for_user(job_id: int, user_id: int):
+    from app.models.durable_job import DurableJob
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(DurableJob).where(
+                DurableJob.id == job_id,
+                DurableJob.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+
+@app.get("/api/durable-jobs/{job_id}")
+async def durable_job_status(
+    job_id: int,
+    current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
+):
+    job = await _get_durable_job_for_user(job_id, int(current_user.id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Durable job not found.")
+    result = json.loads(job.result_json or "{}") if job.result_json else None
+    return {
+        "id": job.id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "attempts": job.attempts,
+        "max_attempts": job.max_attempts,
+        "available_at": job.available_at,
+        "finished_at": job.finished_at,
+        "last_error": job.last_error,
+        "result": result,
+    }
+
+
 @app.post("/api/strategy/recommend")
 async def recommend_strategy(
     req: StrategyRequest,
@@ -742,9 +816,21 @@ async def recommend_strategy(
 @app.post("/api/research/discover")
 async def research_discover(
     req: ResearchRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
 ):
+    if settings.durable_ai_workloads_enabled:
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued research.")
+        job, created = await _enqueue_durable_job(
+            job_type="research_discovery",
+            idempotency_key=f"research:{int(current_user.id)}:{key}",
+            user_id=int(current_user.id),
+            payload={"profile_id": int(current_user.id), "requested_topic": req.topic, "candidate_limit": 8},
+        )
+        return {"queued": True, "job_id": job.id, "status": job.status, "created": created}
     try:
         opportunities = await ResearchService(session).research_and_rank(
             profile_id=int(current_user.id),
@@ -815,93 +901,35 @@ async def build_voice_profile(
 @app.post("/api/content/improve")
 async def improve_content(
     req: ImproveContentRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: AppUser = Depends(require_roles("admin", "owner", "reviewer", "user")),
 ):
-    if not req.body.strip():
-        raise HTTPException(status_code=400, detail="Enter a draft before asking Brand OS to improve it.")
-    profile = await AuthService.get_or_create_profile(session, current_user)
-    if profile is None:
-        raise HTTPException(status_code=400, detail="Complete Brand DNA setup first.")
-    if (
-        not profile.professional_title
-        or not profile.industry
-        or not profile.tone
-        or profile.experience_years is None
-    ):
-        raise HTTPException(status_code=400, detail="Complete Professional Title, Industry, Desired Tone and Years of Experience before improving content.")
-
-    brand_service = BrandIntelligenceService(session)
-    memory = await brand_service.get_memory(profile.id)
-    if memory is None or memory.status != "READY":
-        raise HTTPException(status_code=400, detail="Complete Brand Intelligence setup first.")
-
-    # Polishing stays fast and uses the saved Brand DNA plus relevant learning memory.
-    brand_context = await brand_service.generation_context(
-        profile.id,
-        query=f"{req.title} {req.topic}".strip(),
-    )
-    voice_result = await session.execute(
-        select(VoiceMemory).where(VoiceMemory.profile_id == profile.id).limit(1)
-    )
-    voice = voice_result.scalar_one_or_none()
-    voice_context = {
-        "tone": voice.tone if voice else profile.tone,
-        "sentence_style": voice.sentence_style if voice else "clear and grounded",
-        "preferred_phrases": voice.preferred_phrases if voice else "",
-        "avoid_phrases": voice.avoid_phrases if voice else "",
-        "technical_depth": voice.technical_depth if voice else "moderate",
-    }
-
-    system = """You are the polishing editor inside a human-controlled LinkedIn personal-brand product.
-Improve the user's own draft without changing what they mean.
-
-Rules:
-- Preserve the user's facts, intent, language and personal claims. Never invent experience, metrics, credentials, clients or opinions.
-- If the draft is in Hindi, Hinglish or another language, keep that language unless a change is necessary for clarity.
-- Improve hook, structure, readability, specificity and professional tone.
-- Remove filler, generic AI language and repetition.
-- Do not make the post sound artificially corporate.
-- Do not add unsupported facts.
-- Never use em dashes, en dashes or semicolons.
-- Prefer ordinary human wording, natural sentence lengths and concrete language.
-- Avoid polished corporate filler, generic AI hooks and phrases that sound machine-written.
-- Return JSON only:
-{"title":"","topic":"","body":"","changes":[""],"claims":[{"text":"","support":"user_draft"}]}
-"""
-    prompt = json.dumps({
-        "profile": {
-            "title": profile.professional_title,
-            "industry": profile.industry,
-            "experience_years": profile.experience_years,
-            "tone": profile.tone,
-        },
-        "brand_intelligence": brand_context,
-        "voice": voice_context,
-        "user_language": req.language,
-        "title": req.title,
-        "topic": req.topic,
-        "draft": req.body,
-    }, ensure_ascii=False)
-
+    if settings.durable_ai_workloads_enabled:
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued content improvement.")
+        job, created = await _enqueue_durable_job(
+            job_type="content_improvement",
+            idempotency_key=f"content-improve:{int(current_user.id)}:{key}",
+            user_id=int(current_user.id),
+            payload={"profile_id": int(current_user.id), "title": req.title, "topic": req.topic, "body": req.body, "language": req.language},
+        )
+        return {"queued": True, "job_id": job.id, "status": job.status, "created": created}
     try:
-        improved = await ModelRouterService().generate_json(system, prompt, max_output_tokens=1000)
+        return await ContentAIService().improve(
+            session,
+            profile_id=int(current_user.id),
+            title=req.title,
+            topic=req.topic,
+            body=req.body,
+            language=req.language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Content improvement failed: %s", exc)
         raise HTTPException(status_code=502, detail="Content improvement failed. Please try again.") from exc
-
-    body = normalize_human_style(str(improved.get("body") or ""))
-    if not body:
-        raise HTTPException(status_code=502, detail="The configured LLM provider returned an empty polished draft.")
-    guard = run_content_guards(body)
-    return {
-        "title": str(improved.get("title") or req.title).strip(),
-        "topic": str(improved.get("topic") or req.topic).strip(),
-        "body": body,
-        "changes": improved.get("changes") or [],
-        "claims": improved.get("claims") or [],
-        "guard": guard.__dict__,
-    }
 
 
 @app.get("/api/analytics/overview")
@@ -1158,15 +1186,23 @@ async def reject_approval(
 async def regenerate_approval(
     approval_id: int,
     req: ApprovalDecisionRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: AppUser = Depends(require_roles("admin", "reviewer", "owner", "user")),
 ):
+    if settings.durable_ai_workloads_enabled:
+        key = request.headers.get("X-Idempotency-Key")
+        if not key:
+            raise HTTPException(status_code=400, detail="X-Idempotency-Key is required for queued regeneration.")
+        job, created = await _enqueue_durable_job(
+            job_type="approval_regeneration",
+            idempotency_key=f"approval-regenerate:{int(current_user.id)}:{approval_id}:{key}",
+            user_id=int(current_user.id),
+            payload={"profile_id": int(current_user.id), "approval_id": approval_id, "feedback": req.reason},
+        )
+        return {"queued": True, "job_id": job.id, "status": job.status, "created": created}
     try:
         approval = await ApprovalService(session).regenerate(approval_id, req.reason, int(current_user.id))
-        return {
-            "id": approval.id,
-            "status": approval.status,
-            "reason": approval.reason,
-        }
+        return {"id": approval.id, "status": approval.status, "reason": approval.reason}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

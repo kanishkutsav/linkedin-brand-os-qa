@@ -1,0 +1,66 @@
+name: Phase 3 QA
+
+on:
+  push:
+    branches: ["phase3-qa"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  durable-jobs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      PYTHONPATH: ${{ github.workspace }}/apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+      - name: Compile application
+        run: python -m compileall -q app tests
+      - name: Run Phase 2 regression tests
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./qa.db
+          SCHEDULED_JOB_KEY: qa-test-key
+        run: pytest -q tests/test_scheduled_job_boundary.py tests/test_phase2_qa.py
+      - name: Run Phase 3 durable job tests
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./qa.db
+          SCHEDULED_JOB_KEY: qa-test-key
+        run: pytest -q tests/test_phase3_qa.py
+
+  runtime-3-14:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Compile application under production Python
+        run: python -m compileall -q app tests
+
+  migration-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Phase 3 migration and rollback
+        run: |
+          test -s supabase/migrations/20260926_phase3_durable_jobs.sql
+          test -s supabase/migrations/20260926_phase3_durable_jobs_rollback.sql
+          grep -q "create table if not exists public.durable_jobs" supabase/migrations/20260926_phase3_durable_jobs.sql
+          grep -q "idempotency_key text not null unique" supabase/migrations/20260926_phase3_durable_jobs.sql
+          grep -q "status in ('QUEUED','RUNNING','SUCCEEDED','FAILED')" supabase/migrations/20260926_phase3_durable_jobs.sql
+          grep -q "drop table if exists public.durable_jobs" supabase/migrations/20260926_phase3_durable_jobs_rollback.sql
+          ! grep -q "cron.schedule" supabase/migrations/20260926_phase3_durable_jobs.sql
+# Phase 3 QA intentionally does not deploy or mutate production infrastructure.

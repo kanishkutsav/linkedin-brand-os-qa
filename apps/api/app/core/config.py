@@ -56,6 +56,19 @@ class Settings(BaseSettings):
     agent_in_process_schedule_enabled: bool = True
     scheduled_job_key: str | None = None
 
+    # Phase 3B: durable learning migration is opt-in until production-like QA passes.
+    durable_learning_enqueue_enabled: bool = False
+    durable_learning_worker_enabled: bool = False
+
+    # Phase 3C: AI-heavy workload migration remains opt-in during QA.
+    durable_ai_workloads_enabled: bool = False
+    durable_ai_worker_enabled: bool = False
+    # Phase 3D: move Phase 2 scheduled workload execution behind the same durable worker.
+    durable_scheduled_worker_enabled: bool = False
+    durable_scheduled_jobs_enabled: bool = False
+    durable_worker_poll_seconds: int = 5
+    durable_worker_lease_seconds: int = 600
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
