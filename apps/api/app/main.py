@@ -1124,11 +1124,19 @@ async def execute_approval(
             image_bytes=image_bytes,
             image_mime=image_mime,
         )
+        # Return a durable publication confirmation so the UI can render
+        # success without inferring it from a transient HTTP response.
+        result = await session.execute(
+            select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+        )
+        saved_approval = result.scalar_one_or_none()
         return {
             "id": approval_id,
             "status": "EXECUTED" if publish_result.success else "APPROVED",
             "published": publish_result.success,
             "external_id": publish_result.external_id,
+            "image_urn": getattr(publish_result, "image_urn", None),
+            "published_at": saved_approval.published_at if saved_approval else None,
             "message": publish_result.message,
         }
     except ValueError as exc:
