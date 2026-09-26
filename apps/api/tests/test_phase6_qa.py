@@ -58,7 +58,7 @@ def test_phase6_migration_is_additive_and_rollback_is_scoped():
         / "20260926_phase6_durable_job_fencing.sql"
     ).read_text()
     rollback = (
-        ROOT.parent.parent
+        ROOT
         / "supabase"
         / "migrations"
         / "20260926_phase6_durable_job_fencing_rollback.sql"
