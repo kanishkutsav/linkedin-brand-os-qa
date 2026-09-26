@@ -126,5 +126,37 @@ async function analyticsRead(user: User) {
   const engagementTotal = totals.REACTION + totals.COMMENT + totals.RESHARE;
   return { pipeline, linkedin_performance: { available: true, window_days: 30, from: start.toISOString().slice(0,10), to: new Date(end.getTime()-86400000).toISOString().slice(0,10), totals, engagement_total: engagementTotal, engagement_rate: totals.IMPRESSION ? Number(((engagementTotal / totals.IMPRESSION) * 100).toFixed(2)) : 0, trend, source: "LinkedIn memberCreatorPostAnalytics" } };
 }
+async function durableJobRead(user: User, jobId: number) {
+  if (!Number.isInteger(jobId) || jobId < 1) throw new Error("Invalid job id");
+  const { data, error } = await db.from("durable_jobs")
+    .select("id, user_id, job_type, status, attempts, max_attempts, available_at, locked_at, finished_at, last_error, result_json, created_at, updated_at")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { found: false };
+  let result = null;
+  if (data.result_json) {
+    try { result = JSON.parse(data.result_json); } catch { result = null; }
+  }
+  return {
+    found: true,
+    job: {
+      id: data.id,
+      job_type: data.job_type,
+      status: data.status,
+      attempts: data.attempts,
+      max_attempts: data.max_attempts,
+      available_at: data.available_at,
+      locked_at: data.locked_at,
+      finished_at: data.finished_at,
+      last_error: data.last_error,
+      result,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    },
+  };
+}
 const handlers: Record<string,(u:User)=>Promise<unknown>>={profile:profileRead,"brand/status":brandStatusRead,"brand/memory":brandMemoryRead,"brand/source-posts":sourcePostsRead,"dashboard/approvals":dashboardRead,"agent/status":agentRead,"research/opportunities":researchRead,"learning/status":learningRead,"analytics/overview":analyticsRead};
-Deno.serve(async(req)=>{ if(req.method!=="GET")return json({error:"Method not allowed"},405); const route=new URL(req.url).pathname.replace(/^\/read-api\/?/,"").replace(/^\/?/,""); const h=handlers[route]; if(!h)return json({error:"Not found"},404); try{return json(await h(await authenticate(req)));}catch(e){const m=e instanceof Error?e.message:"Read request failed"; if(m==="Authentication required")return json({error:m},401); console.error("read-api error",e); return json({error:"Read request failed"},500);}});
+
+Deno.serve(async(req)=>{ if(req.method!=="GET")return json({error:"Method not allowed"},405); const route=new URL(req.url).pathname.replace(/^\/read-api\/?/,"").replace(/^\/?/,""); const h=handlers[route]; if(!h){ const match=route.match(/^durable-jobs\/(\d+)$/); if(match)return json(await durableJobRead(await authenticate(req),Number(match[1]))); return json({error:"Not found"},404); } try{return json(await h(await authenticate(req)));}catch(e){const m=e instanceof Error?e.message:"Read request failed"; if(m==="Authentication required")return json({error:m},401); console.error("read-api error",e); return json({error:"Read request failed"},500);}});
