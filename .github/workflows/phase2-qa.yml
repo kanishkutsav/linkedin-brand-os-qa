@@ -110,3 +110,5 @@ jobs:
           ! grep -q "onrender.com" apps/web/vercel.json
           test -s supabase/migrations/20260926_phase8_vercel_cutover.sql
           test -s supabase/migrations/20260926_phase8_vercel_cutover_rollback.sql
+          grep -q "brand-os-learning-processing" supabase/migrations/20260926_phase8_vercel_cutover.sql
+          grep -q "/api/internal/scheduled-jobs/learning" supabase/migrations/20260926_phase8_vercel_cutover.sql
