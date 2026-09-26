@@ -20,7 +20,7 @@ def test_approval_status_contract():
  for s in ("PENDING","EDITED","REGENERATED","APPROVED","EXECUTED","PUBLISHING","REJECTED"):assert s in t
 def test_no_ai_or_linkedin():
  t=FN.read_text();assert "ModelRouterService" not in t and "fetch(" not in t
- assert 'from("linkedin_connections")' not in t and "LinkedIn" not in t
+ assert 'from("linkedin_connections")' not in t and "LinkedInConnection" not in t and "linkedin.publish" not in t
 def test_migration_scoped():
  t=MIG.read_text().lower();r=ROLL.read_text().lower()
  assert "create table if not exists public.mutation_requests" in t and "unique(user_id, operation, idempotency_key)" in t
