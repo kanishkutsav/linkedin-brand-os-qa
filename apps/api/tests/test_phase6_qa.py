@@ -6,6 +6,7 @@ from app.jobs.durable_handlers import build_durable_job_handlers
 
 
 ROOT = Path(__file__).resolve().parents[3]
+API_ROOT = ROOT / "apps" / "api"
 
 
 def test_phase6_ai_workloads_are_explicitly_opt_in():
@@ -29,7 +30,7 @@ def test_phase6_ai_handler_contract_is_complete():
 
 
 def test_phase6_routes_require_idempotency_when_queued():
-    main = (ROOT / "app" / "main.py").read_text()
+    main = (API_ROOT / "app" / "main.py").read_text()
     required_messages = [
         "X-Idempotency-Key is required for queued research.",
         "X-Idempotency-Key is required for queued content improvement.",
@@ -41,9 +42,9 @@ def test_phase6_routes_require_idempotency_when_queued():
 
 
 def test_phase6_worker_uses_lease_fencing():
-    worker = (ROOT / "app" / "jobs" / "durable_worker.py").read_text()
-    service = (ROOT / "app" / "services" / "durable_jobs.py").read_text()
-    model = (ROOT / "app" / "models" / "durable_job.py").read_text()
+    worker = (API_ROOT / "app" / "jobs" / "durable_worker.py").read_text()
+    service = (API_ROOT / "app" / "services" / "durable_jobs.py").read_text()
+    model = (API_ROOT / "app" / "models" / "durable_job.py").read_text()
 
     assert "job.lease_token" in worker
     assert "lease_token: str" in service
@@ -72,17 +73,17 @@ def test_phase6_migration_is_additive_and_rollback_is_scoped():
 
 
 def test_phase6_has_explicit_worker_entrypoint():
-    entrypoint = (ROOT / "apps" / "api" / "app" / "durable_worker_main.py").read_text()
+    entrypoint = (API_ROOT / "app" / "durable_worker_main.py").read_text()
     assert "No durable worker is enabled" in entrypoint
     assert "build_durable_job_handlers" in entrypoint
     assert "allowed_job_types" in entrypoint
 
 
 def test_phase6_side_effecting_ai_workloads_are_retry_idempotent():
-    research = (ROOT / "apps" / "api" / "app" / "agents" / "research.py").read_text()
-    orchestrator = (ROOT / "apps" / "api" / "app" / "agents" / "orchestrator.py").read_text()
-    approval = (ROOT / "apps" / "api" / "app" / "services" / "approval.py").read_text()
-    worker = (ROOT / "apps" / "api" / "app" / "jobs" / "durable_worker.py").read_text()
+    research = (API_ROOT / "app" / "agents" / "research.py").read_text()
+    orchestrator = (API_ROOT / "app" / "agents" / "orchestrator.py").read_text()
+    approval = (API_ROOT / "app" / "services" / "approval.py").read_text()
+    worker = (API_ROOT / "app" / "jobs" / "durable_worker.py").read_text()
 
     for source in (research, orchestrator, approval):
         assert 'event_type == "DURABLE_AI_RESULT"' in source
