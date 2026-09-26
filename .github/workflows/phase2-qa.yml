@@ -104,5 +104,8 @@ jobs:
           test -s requirements.txt
           test -s vercel.json
           grep -q '"outputDirectory": "apps/web/.next"' vercel.json
+          grep -q "NEXT_PUBLIC_API_URL" apps/web/app/page.tsx
+          grep -q " : '';" apps/web/app/page.tsx
+          ! grep -q "onrender.com" apps/web/vercel.json
           test -s supabase/migrations/20260926_phase8_vercel_cutover.sql
           test -s supabase/migrations/20260926_phase8_vercel_cutover_rollback.sql
